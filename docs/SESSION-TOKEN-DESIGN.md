@@ -48,6 +48,17 @@ One row per browser/device session.
 
 A session is refreshable only when it is not revoked and both absolute and idle expiry checks pass. Use UTC instants. Do not treat an IP address or User-Agent as a secret or as proof of device identity.
 
+### Initial session lifetime policy
+
+The following defaults are approved for the initial implementation and must remain configurable through validated server-side configuration:
+
+| Actor | Absolute lifetime | Idle lifetime |
+|---|---:|---:|
+| Customer | 30 days | 7 days |
+| Staff | 12 hours | 30 minutes |
+
+Absolute expiry is a hard ceiling and must never slide on refresh. Idle expiry may be extended only by a successful refresh, and must never exceed the absolute expiry. These values are initial policy defaults, not permanent product constraints; changing them later must be an explicit configuration/policy change with tests.
+
 ### RefreshToken
 
 One row per token in a session's rotation chain.
@@ -230,7 +241,7 @@ Secrets and key rings must be external to source control, access-controlled, bac
 
 These are intentionally not guessed in this design:
 
-1. **Session durations:** absolute lifetime and idle lifetime separately for customers and staff. Access JWT remains 5 minutes initially unless tests/operations justify another value.
+1. **Session duration tuning:** initial defaults are approved: customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep them configurable and revisit only with an explicit policy change. Access JWT remains 5 minutes initially unless tests/operations justify another value.
 2. **JWT signing-key deployment:** asymmetric key and managed secret/KMS/HSM approach, including key rotation ownership.
 3. **Role/permission freshness:** short-lived role snapshot in JWT versus database-backed authorization checks for selected sensitive operations.
 4. **Session concurrency UX:** confirm strict replay revocation and frontend single-flight coordination, including the lost-refresh-response re-authentication behavior.
