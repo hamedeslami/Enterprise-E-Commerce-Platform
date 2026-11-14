@@ -48,4 +48,4 @@ For each phase: state scope and decisions, list changed files, implement, run bu
 
 ## Open decisions
 
-Initial currency/rounding; target country/tax; guest checkout; store timezone; frontend/API origins; initial payment/shipping/email providers; media storage; SKU scope; fractional stock; reservation TTL/backorders. Defer decisions until the phase where needed, but do not invent them.
+Toman precision/rounding (including fractional toman support); applicable Iranian tax rules and tax-inclusive/exclusive pricing; guest checkout; store timezone; frontend/API origins; initial payment/shipping/email providers; media storage; SKU scope; fractional stock; reservation TTL/backorders. Defer decisions until the phase where needed, but do not invent them.
