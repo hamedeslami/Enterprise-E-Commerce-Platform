@@ -29,4 +29,6 @@ No production application code has been started. The architecture must be review
 
 ## Scope
 
-Single-vendor store. The platform exposes REST APIs and does not depend on a particular frontend.
+Single-vendor store targeting Iran initially. Store prices and canonical commerce amounts are expressed in toman. The platform exposes REST APIs and does not depend on a particular frontend.
+
+**Currency integration note:** toman is the store's business unit. Do not assume it is an ISO 4217 currency code. Any rial/toman conversion required by a payment provider must happen explicitly in that provider adapter, according to the provider's documented contract.
