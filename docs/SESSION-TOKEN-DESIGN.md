@@ -6,7 +6,7 @@
 
 This document defines browser session boundaries, access JWT issuance, opaque refresh-token rotation, replay handling, staff MFA pre-authentication state, logout/revocation, and the database invariants needed to make these operations concurrency-safe.
 
-It does not select a production frontend/API origin topology, cookie domain, signing-key hosting product, SMS vendor, or immediate access-token revocation mechanism. Those depend on deployment decisions and are listed as open decisions.
+The browser deployment topology is now decided: the customer storefront is `https://shop.com`, the admin panel is `https://panel.shop.com`, and the API is `https://api.shop.com`. The storefront and admin panel call the API cross-origin with credentials, but all three are same-site under the same HTTPS registrable domain. This document records the resulting browser security boundary. It does not select a signing-key hosting product, SMS vendor, or immediate access-token revocation mechanism.
 
 The API is browser-facing and uses separate HttpOnly cookies for access and refresh credentials. Raw token values must never appear in JSON, URLs, browser storage, application logs, traces, or exception messages.
 
@@ -154,7 +154,24 @@ A refresh is allowed only if the session is active, the token is active, and tok
 
 ## 7. Cookies and CSRF boundary
 
-Cookie names, Domain, SameSite and exact paths are intentionally not finalized until frontend/API deployment topology is known.
+### Confirmed browser topology
+
+- Customer storefront: `https://shop.com`.
+- Admin panel: `https://panel.shop.com`.
+- Backend API: `https://api.shop.com`.
+- Both frontends call the API from a different Origin and must send credentials explicitly. The API must allow only these exact Origins: `https://shop.com` and `https://panel.shop.com`.
+- All production endpoints must use HTTPS. With this topology, requests are cross-origin but same-site (schemeful site), because the hosts share the same registrable domain and scheme.
+
+### Cookie and browser policy
+
+- Set authentication cookies from `api.shop.com` as **host-only cookies**: omit the `Domain` attribute. Do not widen authentication cookies to `.shop.com`; neither frontend needs to read them because they are HttpOnly.
+- Use `Secure`, `HttpOnly`, and explicit `SameSite=Lax` for the access and refresh cookies in this same-site HTTPS deployment. SameSite is not a substitute for CSRF protection: sibling subdomains are same-site, so unsafe requests still require anti-forgery validation and strict Origin validation.
+- Prefer `__Host-`-prefixed cookie names where practical. Such cookies must use `Secure`, `Path=/`, and no `Domain`. If a narrower refresh-cookie Path is later selected, do not use the `__Host-` prefix for that cookie.
+- Configure browser clients to send credentials (`credentials: include` / equivalent) when calling `api.shop.com`.
+- CORS must allow exactly `https://shop.com` and `https://panel.shop.com`, with credentials enabled. Never use wildcard origins or reflect arbitrary Origin values.
+- For unsafe cookie-authenticated requests, require a CSRF token and validate the request Origin against the exact allow-list. Apply this to login-related state changes, OTP request/verify, refresh, logout, session management, and all other unsafe cookie-authenticated endpoints as appropriate. Define a CSRF bootstrap/token-delivery contract before endpoint implementation.
+- Clear cookies with the same name, Path, and other relevant attributes used when setting them.
+- Local development must have an explicit development-only origin/cookie configuration. Do not weaken production `Secure`, CORS, or CSRF settings to make local HTTP development work.
 
 Required properties:
 - Access and refresh credentials are separate cookies, both HttpOnly.
@@ -213,13 +230,12 @@ Secrets and key rings must be external to source control, access-controlled, bac
 
 These are intentionally not guessed in this design:
 
-1. **Frontend/API topology:** same-origin, same-site subdomains, or truly cross-site. This determines SameSite, cookie Path/Domain and CORS.
-2. **Session durations:** absolute lifetime and idle lifetime separately for customers and staff. Access JWT remains 5 minutes initially unless tests/operations justify another value.
-3. **JWT signing-key deployment:** asymmetric key and managed secret/KMS/HSM approach, including key rotation ownership.
-4. **Role/permission freshness:** short-lived role snapshot in JWT versus database-backed authorization checks for selected sensitive operations.
-5. **Session concurrency UX:** confirm strict replay revocation and frontend single-flight coordination, including the lost-refresh-response re-authentication behavior.
-6. **Staff/customer account classification:** define how an Identity user is classified and how staff privileges are prevented from bypassing the mandatory MFA path.
-7. **Session management UX:** which device metadata is shown to users, and whether customers may revoke other sessions.
-8. **MFA transaction cookie and antiforgery bootstrap contract:** finalize names/paths/header only after the deployment topology is known.
+1. **Session durations:** absolute lifetime and idle lifetime separately for customers and staff. Access JWT remains 5 minutes initially unless tests/operations justify another value.
+2. **JWT signing-key deployment:** asymmetric key and managed secret/KMS/HSM approach, including key rotation ownership.
+3. **Role/permission freshness:** short-lived role snapshot in JWT versus database-backed authorization checks for selected sensitive operations.
+4. **Session concurrency UX:** confirm strict replay revocation and frontend single-flight coordination, including the lost-refresh-response re-authentication behavior.
+5. **Staff/customer account classification:** define how an Identity user is classified and how staff privileges are prevented from bypassing the mandatory MFA path.
+6. **Session management UX:** which device metadata is shown to users, and whether customers may revoke other sessions.
+7. **MFA transaction cookie and antiforgery bootstrap contract:** finalize the transaction-cookie scope and CSRF token-delivery contract before endpoint implementation. The production origin topology and baseline cookie/CORS policy are no longer open decisions.
 
 No authentication code should be implemented until these decisions are reviewed and the blocking items above are resolved.
