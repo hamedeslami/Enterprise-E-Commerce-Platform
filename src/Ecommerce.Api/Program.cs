@@ -25,14 +25,20 @@ builder.Services.AddProblemDetails(options =>
 
 builder.Services.AddOpenApi();
 
-var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres");
-if (string.IsNullOrWhiteSpace(postgresConnectionString))
+builder.Services.AddSingleton(serviceProvider =>
 {
-    throw new InvalidOperationException(
-        "The PostgreSQL connection string is missing. Configure ConnectionStrings:Postgres.");
-}
+    var postgresConnectionString = serviceProvider
+        .GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>()
+        .GetConnectionString("Postgres");
 
-builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(postgresConnectionString));
+    if (string.IsNullOrWhiteSpace(postgresConnectionString))
+    {
+        throw new InvalidOperationException(
+            "The PostgreSQL connection string is missing. Configure ConnectionStrings:Postgres.");
+    }
+
+    return NpgsqlDataSource.Create(postgresConnectionString);
+});
 
 builder.Services
     .AddHealthChecks()
