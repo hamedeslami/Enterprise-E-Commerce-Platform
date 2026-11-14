@@ -6,7 +6,7 @@
 
 This document defines browser session boundaries, access JWT issuance, opaque refresh-token rotation, replay handling, staff MFA pre-authentication state, logout/revocation, and the database invariants needed to make these operations concurrency-safe.
 
-The browser deployment topology is now decided: the customer storefront is `https://shop.com`, the admin panel is `https://panel.shop.com`, and the API is `https://api.shop.com`. The storefront and admin panel call the API cross-origin with credentials, but all three are same-site under the same HTTPS registrable domain. This document records the resulting browser security boundary. It does not select a signing-key hosting product, SMS vendor, or immediate access-token revocation mechanism.
+The browser deployment topology is now decided: the customer storefront is `https://shop.com`, the admin panel is `https://panel.shop.com`, and the API is `https://api.shop.com`. The storefront and admin panel call the API cross-origin with credentials, but all three are same-site under the same HTTPS registrable domain. This document records the resulting browser security boundary. It also defines the JWT signing algorithm and key lifecycle without selecting a specific secret manager, KMS or HSM product. SMS vendor and immediate access-token revocation mechanism remain outside this decision.
 
 The API is browser-facing and uses separate HttpOnly cookies for access and refresh credentials. Raw token values must never appear in JSON, URLs, browser storage, application logs, traces, or exception messages.
 
@@ -127,7 +127,19 @@ Revoking a refresh session alone does not invalidate an already-issued stateless
 
 ### Validation
 
-Validate signature, a fixed allow-list of algorithms, issuer, audience, lifetime, not-before and key ID (`kid`). Reject unsigned tokens, algorithm confusion and unknown keys. Signing keys must be managed outside source control and support rotation with a documented overlap period. Do not reuse the ASP.NET Core Data Protection key ring as the JWT signing-key store without an explicit cryptographic/key-management design.
+Validate signature, a fixed allow-list containing only the configured `RS256` algorithm, issuer, audience, lifetime, not-before and key ID (`kid`). Reject unsigned tokens, algorithm confusion, unexpected algorithms and unknown keys. The API must not accept an algorithm selected dynamically from an untrusted token header.
+
+### Approved signing-key strategy
+
+- Use asymmetric RSA signing with **RS256**. The initial RSA private key must be at least 3072 bits.
+- The private signing key is available only to the API signing boundary. JWT validation uses the corresponding public key; public keys may be distributed to trusted internal consumers without exposing signing capability.
+- Keep private keys outside source control, application configuration files, database records and container images. Production deployment must obtain signing capability from an access-controlled secret manager or an appropriate KMS/HSM-backed integration. The exact provider is a deployment decision, not part of this design.
+- Give every signing key a unique, non-secret `kid`. The API signs new tokens with exactly one configured active key and validates tokens against the active and explicitly retained previous public keys.
+- During rotation, publish/load the new public key before signing with the new private key. Keep the previous public key available for at least the maximum access-token lifetime plus the configured clock-skew allowance after the last token was signed with it; then retire it. Unknown `kid` values must be rejected.
+- Define named ownership for key creation, activation, rotation, emergency compromise response and recovery in deployment/runbook documentation. Key backup or recovery material must be protected independently; a compromised private key must be retired, not restored as trusted.
+- In Production, startup must fail closed if no valid active signing key and corresponding verification configuration are available. Do not generate an ephemeral replacement key automatically, because that can invalidate tokens unpredictably and conceal deployment errors.
+- Local development may use a developer-local key or .NET User Secrets. Development keys must never be reused in staging or production.
+- Do not reuse the ASP.NET Core Data Protection key ring as the JWT signing-key store. These are separate cryptographic purposes and lifecycles.
 
 The API extracts the access JWT from the configured access cookie. Do not also accept it from query strings. Whether non-browser bearer clients are supported is a separate API-client decision and must not weaken browser CSRF policy.
 
@@ -262,9 +274,8 @@ Secrets and key rings must be external to source control, access-controlled, bac
 
 ### Remaining decisions / implementation prerequisites
 
-1. **JWT signing-key deployment:** select asymmetric signing and the managed secret/KMS/HSM approach, including key rotation ownership and recovery.
-2. **Session management UX:** decide which device metadata is shown to users and whether customers may revoke other sessions.
-3. **MFA transaction cookie and antiforgery bootstrap contract:** finalize transaction-cookie scope and CSRF token delivery/validation before implementing endpoints.
-4. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
+1. **Session management UX:** decide which device metadata is shown to users and whether customers may revoke other sessions.
+2. **MFA transaction cookie and antiforgery bootstrap contract:** finalize transaction-cookie scope and CSRF token delivery/validation before implementing endpoints.
+3. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
 
 No authentication code should be implemented until the remaining prerequisites are reviewed and the security contracts are complete.
