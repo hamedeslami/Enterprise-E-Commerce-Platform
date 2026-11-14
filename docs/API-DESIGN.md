@@ -20,6 +20,8 @@ These are illustrative contracts, not a promise every endpoint ships in the firs
 
 ## HTTP and representation
 
+- All commerce amounts (product prices, cart/order totals, taxes, discounts, payments and refunds) are whole-toman JSON integers. Fractional toman values are invalid. The API must document the amount unit explicitly; do not label toman with an ISO 4217 currency code.
+
 - HTTPS outside local development.
 - Explicit JSON DTOs; never serialize EF entities/domain aggregates.
 - Correct status codes: 200/201/202/204, 400, 401, 403, 404, 409, 422 where appropriate, 429 and 5xx.
@@ -55,4 +57,4 @@ Generate OpenAPI from actual contracts. Document cookie behavior, CSRF header, c
 
 ## Decisions pending
 
-Storefront locale (Persian/Farsi is expected but not yet confirmed), explicit API representation/identifier for toman, guest cart capability, Iranian address fields, frontend/API origin topology and pagination-total requirements.
+Storefront locale (Persian/Farsi is expected but not yet confirmed), explicit API amount-unit identifier for whole-toman integers, guest cart capability, Iranian address fields, frontend/API origin topology and pagination-total requirements.
