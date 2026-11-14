@@ -15,7 +15,7 @@ Identity lifecycle, initial roles/permissions, login/logout, access/refresh cook
 **Exit:** auth, CSRF, replay, role, IDOR and cookie tests pass; no unresolved critical/high security findings.
 
 ## Phase 3 — Catalog and inventory
-Product types, variants, attributes, categories, brands, media metadata, inventory, movements, reservations, backorders, concurrency, storefront browse/search and admin catalog APIs.
+Product types, variants, attributes, categories, brands, media metadata, inventory, movements, reservations, configurable backorder policy, concurrency-safe stock allocation, storefront browse/search and admin catalog APIs. Backorders are configurable per product/variant and default to disabled (`NoBackorders`); supported modes are `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`. Variant-level policy overrides the product-level policy. Products/variants may disable stock management where stock tracking is not applicable.
 **Exit:** catalog/stock rules, migrations, API, authorization and concurrent stock tests pass.
 
 ## Phase 4 — Pricing, taxes and promotions
@@ -28,7 +28,7 @@ Customer profiles/addresses, guest/authenticated carts, login merge, server-side
 
 ## Phase 6 — Checkout and orders
 Checkout orchestration/idempotency, stock reservation, order creation, immutable snapshots, state transitions, cancellation, notes and refund domain records.
-**Exit:** duplicate checkout, stock race, state transition and snapshot tests pass.
+**Exit:** duplicate checkout, stock race (including simultaneous requests against a final unit), backorder policy, reservation expiry, state transition and snapshot tests pass.
 
 ## Phase 7 — Payments and shipping
 Provider-independent payment contracts; implement a real provider only after selection; webhook signatures/inbox/idempotency/reconciliation/refunds; shipping zones/methods/classes/shipments/tracking.
