@@ -75,11 +75,17 @@ Security/privacy/dependency review, performance/query plans/load tests, concurre
 
 **Exit:** release checklist signed off; residual risks documented and accepted by owner.
 
+## Technical debt and deferred decisions
+
+Every deferred decision must be recorded with an ID, reason, closure milestone and objective evidence in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). Review the register at the start and end of every phase. No security or operational prerequisite may be deferred beyond its explicit gate; all rows marked before production block release until implemented and verified. A provider being selected is not closure evidence.
+
 ## Working agreement
 
 For each phase: state scope and decisions, list changed files, implement, run build/tests, report exact results, explain remaining issues, update docs/progress, and wait for approval. Never claim tests passed unless actually run. No fake critical providers or unexplained placeholders.
 
 ## Decisions deferred to relevant phases
+
+All deferrals below are tracked with closure gates in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md); this list is an index, not a substitute for the register.
 
 - **Phase 2:** Iranian SMS provider; exact frontend/API origin topology; production WAF/CDN; Redis adoption only if measured need.
 - **Before Phase 3:** SKU uniqueness scope; fractional inventory; stock behavior for grouped, virtual, downloadable and external products.
