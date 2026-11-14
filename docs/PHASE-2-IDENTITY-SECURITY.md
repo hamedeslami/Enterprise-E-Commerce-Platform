@@ -21,10 +21,10 @@ The EF design-time factory and pinned `dotnet-ef` tool are included. Generate th
 
 ```bash
 dotnet tool restore
-dotnet ef migrations add InitialIdentitySchema \\
-  --project src/Modules/Identity/Identity.csproj \\
-  --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \\
-  --context IdentityDbContext \\
+dotnet ef migrations add InitialIdentitySchema \
+  --project src/Modules/Identity/Identity.csproj \
+  --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \
+  --context IdentityDbContext \
   --output-dir Persistence/Migrations
 ```
 
