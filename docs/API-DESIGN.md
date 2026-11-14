@@ -27,9 +27,8 @@ These are illustrative contracts, not a promise every endpoint ships in the firs
 - Correct status codes: 200/201/202/204, 400, 401, 403, 404, 409, 422 where appropriate, 429 and 5xx.
 - RFC 9457 Problem Details with stable application error codes and safe details.
 - Never expose stack traces, SQL, provider secrets or sensitive data.
-- UTC ISO-8601 timestamps.
-- Document enum and compatibility behavior.
-- Document enum and compatibility behavior.
+- UTC ISO-8601 timestamps. Store-local schedule inputs/outputs use the configured `Asia/Tehran` timezone; the default user-facing locale is Persian (`fa-IR`). API clients must not infer timezone from server location.
+- Document enum values, compatibility behavior and deprecation policy.
 
 ## Pagination, filtering and sorting
 
@@ -57,4 +56,4 @@ Generate OpenAPI from actual contracts. Document cookie behavior, CSRF header, c
 
 ## Decisions pending
 
-Storefront locale (Persian/Farsi is expected but not yet confirmed), explicit API amount-unit identifier for whole-toman integers, guest cart capability, Iranian address fields, frontend/API origin topology and pagination-total requirements.
+Define the explicit API amount-unit field/contract for whole-toman integers; guest cart capability; Iranian address fields; frontend/API origin topology; and pagination-total requirements. Persian (`fa-IR`) is the default store locale and `Asia/Tehran` is the store timezone. UUIDv7 identifiers are used consistently and serialized as canonical UUID strings in JSON.
