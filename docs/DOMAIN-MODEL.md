@@ -48,12 +48,12 @@ Review (product, author, rating, body, moderation and verified-purchase evidence
 7. Backorder policy is explicit, configurable per product/variant, defaults to disabled, and variant policy overrides product policy.
 8. Reservation expiry, release and consumption are idempotent; retries cannot double-release or double-consume stock. If payment is verified after expiry/release, the order enters an exception/reconciliation/refund path; expired stock is never silently reallocated.
 9. Every on-hand stock adjustment produces a stock movement.
-9. Order captures immutable item, address, price, discount and tax snapshots.
-10. Order transitions and refund limits are validated by server-side operations.
-11. Webhooks are signature-verified and idempotent; redirect alone never proves payment.
-12. Coupon eligibility and usage limits are checked atomically.
-13. Customer ownership comes from authenticated identity or validated guest capability, never trusted client userId.
-14. Catalog edits/deletions cannot corrupt order history.
+10. Order captures immutable item, address, price, discount and tax snapshots.
+11. Order transitions and refund limits are validated by server-side operations.
+12. Webhooks are signature-verified and idempotent; redirect alone never proves payment.
+13. Coupon eligibility and usage limits are checked atomically.
+14. Customer ownership comes from authenticated identity or validated guest capability, never trusted client userId.
+15. Catalog edits/deletions cannot corrupt order history.
 
 ## State machines to define before implementation
 
