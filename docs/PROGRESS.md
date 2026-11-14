@@ -1,14 +1,14 @@
 # Project Progress
 
-**Current phase:** Phase 1 — Project Foundation  
-**Status:** In progress. Phase 0 has been explicitly approved by the owner.  
-**Implementation status:** Initial solution, API host, PostgreSQL connection pool and readiness check, tests, Docker and CI foundation are implemented in the working branch. Build/test and Compose verification remain outstanding.
+**Current phase:** Phase 1 — Project Foundation verified; awaiting final CI workflow PR merge.  
+**Status:** Phase 0 approved. Phase 1 implementation, PostgreSQL-backed tests and Docker Compose smoke test have passed GitHub Actions run [#54](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/actions/runs/43584199385).
 
 ## Repository
 
 - Repository: https://github.com/hamedeslami/Enterprise-E-Commerce-Platform
-- Working branch: phase-1/project-foundation
-- Active review: PR #4 (version alignment); subsequent Phase 1 commits are on the same branch.
+- Phase 1 foundation branch: `phase-1/project-foundation` (merged into `main`).
+- Current CI enhancement branch: `phase-1/compose-smoke-test`.
+- Current review: [PR #5 — Docker Compose CI smoke test](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/5), open and awaiting merge.
 
 ## Decisions confirmed
 
@@ -28,7 +28,7 @@
 - Runtime/framework baseline: .NET 10 LTS, ASP.NET Core 10 and C# 14.
 - ORM/provider baseline: EF Core 10.0.15 and Npgsql EF Core provider 10.0.3; versions are centrally pinned and stable.
 
-## Phase 1 scope
+## Phase 1 delivered and verified
 
 - Solution and project structure.
 - Centralized build and package configuration.
@@ -38,14 +38,10 @@
 - Module-owned EF Core persistence boundary and migration strategy.
 - Structured logging.
 - Docker Compose local environment.
-- Unit/integration/architecture test foundations.
-- CI build/test workflow with PostgreSQL service.
+- Unit/integration test infrastructure and CI build.
+- Dedicated Compose smoke test for API liveness, database readiness and OpenAPI.
 
-## Current blockers / verification
-
-- Npgsql EF Core provider 10.0.3 targets .NET 10 and depends on EF Core >= 10.0.4 and < 11.0.0 and Npgsql >= 10.0.3; selected versions are aligned.
-- No business module currently owns persisted tables. Therefore no shared/empty DbContext or artificial migration has been added. The first module will introduce its own DbContext and migrations.
-- This execution environment has no .NET SDK or Docker CLI, so local build/test/Compose execution cannot be claimed. CI is configured for a PostgreSQL-backed integration test run; its result must be observed before Phase 1 is considered verified.
+GitHub Actions run [#54](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/actions/runs/43584199385) passed both jobs: `build-and-test` and `compose-smoke-test`.
 
 ## Deferred decisions
 
@@ -54,8 +50,9 @@
 - Guest checkout requirement and Iranian address model.
 - Frontend/API origin topology.
 - Initial payment, shipping, email/SMS and media storage providers.
-- SKU uniqueness scope, fractional inventory and stock behavior for special product types.
+- SKU uniqueness scope.
+- Fractional inventory and stock behavior for special product types.
 
 ## Next step
 
-Run the updated PR CI and verify local Docker Compose smoke tests. Once the first module introduces persisted data, add its owned DbContext, design-time factory and migration. Complete Phase 1 verification, report exact results, then wait for explicit approval before Phase 2.
+Merge PR #5 after review. Then Phase 1 can be closed. Phase 2 (Identity and Security) must begin only after explicit owner approval. No authentication implementation has been started in Phase 1.
