@@ -18,6 +18,8 @@
 - API-first backend; frontend is a separate future client.
 - Modular Monolith; not microservices.
 - Authentication target: JWT access + refresh tokens in separate HttpOnly cookies with CSRF defenses.
+- Initial target country/market: Iran.
+- Store price and commerce amount unit: toman.
 
 ## Phase 0 documents
 
@@ -30,8 +32,8 @@
 
 ## Pending owner decisions
 
-- Initial currency and monetary rounding/minor-unit policy.
-- Target market/country and applicable tax rules.
+- Toman precision/scale and monetary rounding policy (including whether fractional toman values are allowed).
+- Applicable Iranian tax rules and tax-inclusive/exclusive pricing policy.
 - Guest checkout requirement.
 - Store timezone.
 - Frontend/API origin topology (same-site or cross-site).
