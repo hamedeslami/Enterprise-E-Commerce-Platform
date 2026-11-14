@@ -50,7 +50,7 @@ builder.Services
     .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"]);
 
 builder.Services.AddBuildingBlocks(builder.Configuration);
-builder.Services.AddIdentityModule(builder.Configuration);
+builder.Services.AddIdentityModule();
 builder.Services.AddValidatorsFromAssemblyContaining<ApiAssemblyMarker>();
 
 var app = builder.Build();
