@@ -18,10 +18,12 @@ The API is browser-facing and uses separate HttpOnly cookies for access and refr
 4. **Opaque refresh credential.** Generate a 256-bit cryptographically random secret. The browser receives an opaque value containing a public token identifier and the secret; the database stores only SHA-256(secret), never the secret.
 5. **Single-use rotation.** Every successful refresh consumes the presented token and creates exactly one successor in the same database transaction.
 6. **Strict replay response.** A valid, already-consumed refresh token is evidence of replay: revoke that session and its active refresh token. A token-ID match with a secret-hash mismatch is just an invalid credential and must not revoke the session.
-7. **Serialize refresh on the client.** The frontend must use a single-flight refresh operation so concurrent requests/tabs do not intentionally submit the same token simultaneously. Server-side conditional updates remain the authority.
-8. **Bounded access-token revocation delay.** Revoking a refresh session does not instantly invalidate a stateless access JWT already issued for it. Without a persisted session check, the residual window is at most the access-token lifetime.
-9. **Staff MFA is a separate pre-authentication transaction.** Password success for staff does not create a normal session or access/refresh cookies. A short-lived, purpose-bound MFA transaction is required until TOTP or a single-use recovery code succeeds.
-10. **Customer and staff assurance are explicit.** Session metadata records the authentication method/assurance that created it. Staff sessions can only be created after successful MFA.
+7. **Serialize refresh on the client.** The frontend must use a single-flight refresh operation so concurrent requests/tabs do not intentionally submit the same token simultaneously. Use cross-tab coordination where supported (for example, Web Locks or BroadcastChannel), but treat it as reliability coordination, not a security boundary. Server-side conditional updates remain authoritative.
+8. **Strict replay is accepted despite its availability trade-off.** Any second presentation of a valid, already-consumed refresh token revokes that session, including a legitimate retry after a lost response or a race that escaped client coordination. No grace period or idempotent replay window is provided. The affected user may need to authenticate again.
+9. **JWT-claim authorization is the selected initial strategy.** The API authorizes requests using server-issued role/permission claims in the short-lived access JWT; it does not query the Identity database on every authorized request. Authorization changes therefore become effective when the current access JWT expires (target maximum 5 minutes), unless the session is separately revoked and an immediate-revocation mechanism is later introduced. This bounded staleness is an explicit accepted trade-off.
+10. **Staff MFA is a separate pre-authentication transaction.** Password success for staff does not create a normal session or access/refresh cookies. A short-lived, purpose-bound MFA transaction is required until TOTP or a single-use recovery code succeeds.
+11. **Customer and staff assurance are explicit.** Session metadata records the authentication method/assurance that created it. Staff sessions can only be created after successful MFA.
+12. **Account type is explicit and server-controlled.** Each Identity user has exactly one account type (`Customer` or `Staff`), independent of roles. Customer authentication endpoints reject Staff accounts; Staff authentication endpoints reject Customer accounts. Account type is assigned only by trusted provisioning/administrative workflows, never by client input. Conversion between account types is a privileged, audited operation and must revoke existing sessions.
 
 ## 3. Conceptual persistence model
 
@@ -113,7 +115,13 @@ Keep claims minimal:
 
 Do not accept client-supplied roles, permissions, user IDs or assurance values. Do not put PII, phone numbers, addresses or other unnecessary data in the JWT.
 
-Authorization claim strategy needs an explicit decision during implementation. If coarse roles are embedded, role changes can remain stale until the access JWT expires. Fine-grained permissions must not be trusted from a long-lived client-controlled source.
+### Authorization model (approved: JWT claims)
+
+Authorization is based on claims minted by the API after successful authentication. The client cannot submit or override roles, permissions, account type, or authentication assurance. The initial implementation will place the server-authoritative role claims (and only the permission claims needed by the API policy model) in the access JWT. API authorization policies evaluate those claims without a per-request Identity database lookup.
+
+This deliberately accepts bounded authorization staleness: a role or permission change does not alter an already-issued JWT. With the approved 5-minute access-token lifetime, the normal maximum stale-claim window is the remaining lifetime of that JWT. Refresh must issue claims from current server-side account/role data, not copy claims from the previous token. Do not lengthen access-token lifetime to improve performance without revisiting this decision.
+
+Revoking a refresh session alone does not invalidate an already-issued stateless access JWT. The same residual window applies after role removal or account disablement unless a future immediate-revocation mechanism (such as a session/version check) is explicitly designed and implemented. This design does not claim immediate revocation. Sensitive operations remain subject to their explicit policy requirements, audit logging and other domain-level safeguards; these do not silently imply a database permission lookup on every request.
 
 ### Validation
 
@@ -146,14 +154,14 @@ A concurrent second use of the same valid token is treated as replay and revokes
 
 ### Creation
 
-- Customer password login: create session only after Identity password validation and account eligibility checks.
-- Customer SMS OTP login: create session only after atomic, purpose-bound OTP verification/consumption and verified-phone eligibility checks.
-- Staff login: password success creates only StaffMfaTransaction. Successful TOTP or recovery-code verification consumes the transaction and creates the session.
+- Customer password login: create session only after Identity password validation, `AccountType == Customer`, and account eligibility checks.
+- Customer SMS OTP login: create session only after atomic, purpose-bound OTP verification/consumption, `AccountType == Customer`, and verified-phone eligibility checks. A Staff account must be rejected even if it has a verified phone.
+- Staff login: require `AccountType == Staff`; password success creates only StaffMfaTransaction. Successful TOTP or recovery-code verification consumes the transaction and creates the session. A Customer account must not enter the staff MFA flow.
 - Never allow OTP login to register an account implicitly.
 
 ### Refresh and expiry
 
-A refresh is allowed only if the session is active, the token is active, and token/session expiry checks pass. Idle expiry may slide on successful refresh, but absolute expiry never slides. Proposed initial session durations remain configurable and must be chosen before endpoint implementation; do not silently ship unlimited or effectively permanent sessions.
+A refresh is allowed only if the session is active, the token is active, and token/session expiry checks pass. Idle expiry may slide on successful refresh, but absolute expiry never slides. The approved initial session durations are configurable: customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Do not silently ship unlimited or effectively permanent sessions.
 
 ### Logout and administrative revocation
 
@@ -237,16 +245,21 @@ Secrets and key rings must be external to source control, access-controlled, bac
 - Refresh errors do not disclose whether a user/session/token exists.
 - Logs and Problem Details contain no credentials or sensitive token material.
 
-## 10. Decisions required before implementation
+## 10. Decisions confirmed and remaining before implementation
 
-These are intentionally not guessed in this design:
+### Confirmed decisions
 
-1. **Session duration tuning:** initial defaults are approved: customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep them configurable and revisit only with an explicit policy change. Access JWT remains 5 minutes initially unless tests/operations justify another value.
-2. **JWT signing-key deployment:** asymmetric key and managed secret/KMS/HSM approach, including key rotation ownership.
-3. **Role/permission freshness:** short-lived role snapshot in JWT versus database-backed authorization checks for selected sensitive operations.
-4. **Session concurrency UX:** confirm strict replay revocation and frontend single-flight coordination, including the lost-refresh-response re-authentication behavior.
-5. **Staff/customer account classification:** define how an Identity user is classified and how staff privileges are prevented from bypassing the mandatory MFA path.
-6. **Session management UX:** which device metadata is shown to users, and whether customers may revoke other sessions.
-7. **MFA transaction cookie and antiforgery bootstrap contract:** finalize the transaction-cookie scope and CSRF token-delivery contract before endpoint implementation. The production origin topology and baseline cookie/CORS policy are no longer open decisions.
+1. **Refresh replay:** strict replay revocation is accepted. A valid consumed token presented again revokes the owning session and its active refresh token. No grace period is allowed. Frontend single-flight and cross-tab coordination are required reliability measures, but the server remains authoritative. A lost successful response can require the user to sign in again.
+2. **Account classification:** every Identity user has exactly one explicit server-controlled `AccountType`: `Customer` or `Staff`, independent of roles. Authentication endpoints enforce the matching type. Client input cannot assign or change it.
+3. **Authorization:** use server-issued JWT role/permission claims for API authorization, with no per-request Identity database lookup in the initial model. Claim changes take effect on token expiry; the 5-minute access-token lifetime bounds the normal stale-authorization window. This is an intentional trade-off, not immediate revocation.
+4. **Session duration:** customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep configurable. Access JWT target remains 5 minutes.
+5. **Browser topology and cookie baseline:** `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact-origin credentialed CORS and CSRF/Origin validation.
 
-No authentication code should be implemented until these decisions are reviewed and the blocking items above are resolved.
+### Remaining decisions / implementation prerequisites
+
+1. **JWT signing-key deployment:** select asymmetric signing and the managed secret/KMS/HSM approach, including key rotation ownership and recovery.
+2. **Session management UX:** decide which device metadata is shown to users and whether customers may revoke other sessions.
+3. **MFA transaction cookie and antiforgery bootstrap contract:** finalize transaction-cookie scope and CSRF token delivery/validation before implementing endpoints.
+4. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
+
+No authentication code should be implemented until the remaining prerequisites are reviewed and the security contracts are complete.
