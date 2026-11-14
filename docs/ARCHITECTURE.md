@@ -83,7 +83,7 @@ Checkout coordinates; it does not own product, stock, price, payment or order st
 
 Endpoints remain thin: authenticate/authorize, bind and validate DTOs, invoke a use case, map result to HTTP. No business logic or direct EF queries in controllers/endpoints. Never expose EF entities as API contracts. Use FluentValidation at boundaries and enforce domain invariants again in application/domain operations and database constraints.
 
-Each module owns its DbContext, schema, EF configurations and migrations. PostgreSQL is authoritative. Apply migrations in a controlled deployment step, not concurrently on every app startup. Use explicit transactions, constraints and concurrency control. Money uses decimal/numeric with documented precision and is denominated in toman for the initial Iranian store; instants are UTC. Payment-provider-specific rial/toman units must be converted only at the provider adapter boundary, never implicitly across the domain.
+Each module owns its DbContext, schema, EF configurations and migrations. PostgreSQL is authoritative. Apply migrations in a controlled deployment step, not concurrently on every app startup. Use explicit transactions, constraints and concurrency control. All persisted and API-facing commerce amounts are whole toman integers: use .NET `long` and PostgreSQL `BIGINT`. Percentage/rate calculations may require a higher-precision intermediate, but every amount posted to a ledger, cart, order, refund or payment must be rounded to a whole toman using one explicit, tested rounding policy. Instants are UTC. Payment-provider-specific rial/toman units must be converted only at the provider adapter boundary, never implicitly across the domain.
 
 Cross-module checkout is not a distributed transaction. Use orchestration, stock reservations, idempotency and compensating actions.
 
@@ -113,4 +113,4 @@ Testability: unit, PostgreSQL integration, API/security and architecture depende
 
 ## Product decisions still open
 
-Tax rules and legal requirements for Iran; toman amount precision and rounding policy; guest checkout; payment/shipping/email providers; frontend/API deployment topology and origins; media storage; downloadable product delivery. Keep provider-specific behavior behind configuration/provider boundaries, but do not invent it.
+Tax rules and legal requirements for Iran; the exact rounding policy for percentage-based calculations; guest checkout; payment/shipping/email providers; frontend/API deployment topology and origins; media storage; downloadable product delivery. Keep provider-specific behavior behind configuration/provider boundaries, but do not invent it.
