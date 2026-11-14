@@ -39,7 +39,7 @@
 - Frontend/API origin topology (same-site or cross-site).
 - Initial payment, shipping, email/SMS and media storage providers.
 - SKU uniqueness scope and whether fractional inventory is required.
-- Stock reservation TTL. Backorder policy is confirmed: configurable per product/variant, default disabled (`NoBackorders`); supported modes: `NoBackorders`, `AllowBackorders`, `AllowBackordersNotify`.
+- Stock reservation TTL is confirmed: default 15 minutes, configurable at store level. Expired unpaid reservations must be released idempotently. Backorder policy is confirmed: configurable per product/variant, default disabled (`NoBackorders`); supported modes: `NoBackorders`, `AllowBackorders`, `AllowBackordersNotify`.
 - Identifier strategy (UUID/ULID or bigint).
 
 The whole-toman amount representation is confirmed; the precise rounding rule for percentage/rate calculations must be finalized before pricing/tax implementation. These decisions can be finalized in the relevant phase if they do not block foundation design. No assumptions should silently become implemented business rules.
