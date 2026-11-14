@@ -10,13 +10,14 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
-            var settings = new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Postgres"] =
-                    "Host=127.0.0.1;Port=5432;Database=ecommerce_test;Username=ecommerce;Password=ci-only-password;Timeout=5;Command Timeout=5"
-            };
+            var connectionString =
+                Environment.GetEnvironmentVariable("TEST_POSTGRES_CONNECTION_STRING")
+                ?? "Host=127.0.0.1;Port=5432;Database=ecommerce;Username=ecommerce;Password=change-this-local-password;Timeout=5;Command Timeout=5";
 
-            configuration.AddInMemoryCollection(settings);
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Postgres"] = connectionString
+            });
         });
     }
 }
