@@ -12,7 +12,7 @@ Each module owns its DbContext, tables, EF configurations, migrations and transa
 
 - Identity: users, roles, permissions, assignments, sessions and refresh-token records. Unique normalized login identifiers; index user/session/family and token hash. Never persist raw tokens.
 - Catalog: products, variants, categories, category hierarchy, attributes/values, assignments, brands, tags and join tables. Define SKU and slug uniqueness scope. Prevent duplicate/conflicting variant attribute combinations. Avoid dozens of nullable type-specific columns and avoid generic JSON as the primary model.
-- Inventory: stock items, reservations with expiry/status, append-only movements. Use quantity types appropriate to discrete or fractional stock. Atomic conditional updates or concurrency tokens prevent overselling.
+- Inventory: stock items, reservations with expiry/status, append-only movements, and explicit stock-management/backorder policy. Stock management can be disabled where tracking is not applicable. Backorder policy is configurable per product/variant, defaults to `NoBackorders`, and supports `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`; a variant override takes precedence over the product default. Define the effective policy in the inventory/catalog contract rather than silently inheriting inconsistent defaults. Use quantity types appropriate to discrete or fractional stock. Atomic conditional updates, row locks or equivalent concurrency control prevent overselling when backorders are disabled. Reservation creation and available-stock validation must be one atomic database operation; application-memory locks are insufficient across API replicas.
 - Pricing/taxes/promotions: numeric monetary values with currency; sale schedules; jurisdiction/effective-date tax rules; normalized unique coupon codes and transactional redemption records.
 - Customers/cart: customer profiles and addresses; carts and items; guest carts use high-entropy opaque capabilities, not login tokens. Index owner/status/expiry and cart item lookups.
 - Orders/payments: orders, item/address snapshots, notes, status history, refunds, payment attempts/transactions, webhook inbox and idempotency records. Preserve product name, SKU, variant selection, unit price, currency, tax/discount breakdown and totals.
@@ -29,7 +29,9 @@ Do not index every column speculatively. Validate query plans using representati
 - Keep transactions within a module wherever possible.
 - Checkout is an orchestration workflow, not a distributed transaction: validate cart/selections; calculate authoritative totals; reserve stock; create pending order with snapshots; initiate payment; consume or release reservations based on verified outcome and timeout policy.
 - Every externally retried operation needs an idempotency boundary.
-- Stock reservation uses atomic SQL predicates, row locking or equivalent concurrency-safe logic, tested with concurrent PostgreSQL requests.
+- Stock reservation uses atomic SQL predicates, row locking or equivalent concurrency-safe logic, tested with concurrent PostgreSQL requests, including two or more buyers racing for the final unit.
+- When backorders are disabled, the database operation must reject allocation that would make available stock negative. When enabled, oversell is an explicit policy outcome and must remain observable in stock/order state.
+- Reservation expiry/release and reservation consumption must be idempotent; a retry must not release or consume the same reservation twice.
 - Coupon usage counters/records update atomically.
 - Webhook inbox uniqueness prevents duplicate application.
 - Use transactional outbox only when a committed business change must reliably publish an event.
