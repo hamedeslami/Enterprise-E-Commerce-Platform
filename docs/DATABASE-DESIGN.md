@@ -1,6 +1,6 @@
 # Database Design
 
-**Status:** Proposed, Phase 0. **Database:** PostgreSQL. **ORM:** EF Core 11.
+**Status:** Proposed, Phase 0. **Database:** PostgreSQL. **ORM:** EF Core 10.
 
 ## Identifiers
 

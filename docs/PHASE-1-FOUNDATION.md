@@ -4,43 +4,55 @@
 
 ## Implemented foundation
 
-- .NET 11 SDK pin and shared build properties.
-- Central Package Management for stable packages used by the API and tests.
-- ASP.NET Core API host.
+- .NET 10 SDK pin (10.0.404) and shared build properties targeting `net10.0` / C# 14.
+- Central Package Management for stable packages used by the API and tests; EF Core 10.0.15 and Npgsql EF Core provider 10.0.3 are pinned for module-owned persistence.
+- ASP.NET Core 10 API host.
 - Global Problem Details registration with trace identifier.
 - Built-in OpenAPI document endpoint.
-- Liveness health check.
+- Separate liveness and database readiness health checks.
+- PostgreSQL connection pool registered through a singleton `NpgsqlDataSource`.
+- Readiness check opens a real PostgreSQL connection and executes `SELECT 1`.
 - Serilog host integration with console sink.
 - FluentValidation assembly scanning.
 - Validated store locale and timezone options; defaults are `fa-IR` and `Asia/Tehran`.
-- Unit and API integration test projects.
-- Dockerfile, PostgreSQL Compose service, local environment template and CI workflow.
+- Unit and API integration test projects; integration tests exercise PostgreSQL readiness.
+- Dockerfile, PostgreSQL Compose service, local environment template and CI workflow with a PostgreSQL 18 service.
 - Module assembly policy: create each module project when its implementation phase starts instead of committing 18 empty placeholder assemblies; see [module boundaries](../src/Modules/README.md).
+
+## Persistence boundary
+
+The API host owns connection-pool composition and infrastructure health only. It does not own a shared commerce DbContext.
+
+Each business module owns its DbContext, EF configurations, schema and migrations. Since no business module has been implemented in Phase 1, creating an empty central DbContext or a fake initial migration would violate the approved module ownership boundary and create misleading migration history. EF Core and provider versions are pinned centrally; the first actual DbContext, design-time factory and migration will be added with the first module that owns persisted tables. Migration application must remain a controlled deployment step, not automatic on every API replica startup.
 
 ## Deliberately not implemented yet
 
-- EF Core DbContext/provider/migrations.
+- Module-owned DbContext, design-time factory and migrations (introduced with the first persistence-owning module).
 - Module business logic, authentication, catalog, inventory, checkout or payments.
 - Redis, message broker, distributed job framework or generic repository layer.
 
-## PostgreSQL provider compatibility decision
+## Version alignment
 
-As of 2026-11-14, EF Core 11.0.0 is stable. The Npgsql EF Core 11 provider is still at `11.0.0-rc.3`; the latest stable provider line is 10.0.3 and belongs to the EF Core 10 major line.
+The owner approved moving from .NET 11 to .NET 10 LTS on 2026-11-14. The selected stable baseline is:
 
-Do not reference Npgsql EF Core 10 from EF Core 11, and do not silently introduce a release-candidate dependency into a project whose dependency policy is stable-only.
+| Component | Version |
+|---|---:|
+| .NET SDK | 10.0.404 |
+| .NET / ASP.NET Core | 10.0.15 runtime line |
+| C# | 14 |
+| EF Core | 10.0.15 |
+| Npgsql EF Core provider | 10.0.3 |
+| Npgsql ADO.NET driver | 10.0.3 |
+| PostgreSQL | 18 |
 
-Before database wiring, choose one of these paths:
-
-1. **Stable-only:** use EF Core 10.0.15 with Npgsql EF Core 10.0.3 on the .NET 11 host, after a compatibility smoke test. This temporarily departs from the EF Core 11 target.
-2. **Stay on EF Core 11:** use Npgsql EF Core 11.0.0-rc.3 temporarily, isolated behind Infrastructure, with explicit acceptance of prerelease risk and a tracked upgrade to stable when released.
-
-No EF migrations should be generated until this decision is made.
+Npgsql EF Core provider 10.0.3 targets .NET 10 and declares dependencies on EF Core / EF Core Relational >= 10.0.4 and < 11.0.0, plus Npgsql >= 10.0.3. This is compatible with the centrally pinned EF Core 10.0.15 and Npgsql 10.0.3 versions. No prerelease package is required.
 
 ## Verification still required
 
-- Restore, Release build and unit/integration tests on .NET SDK 11.0.100.
+- Restore and Release build on .NET SDK 10.0.404.
+- Unit and integration tests, including the real PostgreSQL readiness query.
 - Docker Compose startup and PostgreSQL health check.
-- API liveness and OpenAPI smoke tests.
-- PostgreSQL connection and migration smoke test after the provider decision.
+- API liveness, readiness and OpenAPI smoke tests.
+- Module-owned migration generation/application once the first persistence-owning module is introduced.
 
-The current execution environment does not have the .NET SDK or Docker CLI installed. The GitHub Actions workflow is the intended remote build/test verifier; until a successful run is observed, the solution is not considered build-verified.
+The current execution environment does not have the .NET SDK or Docker CLI installed. GitHub Actions is configured to run against PostgreSQL 18; until a successful run is observed, the solution is not considered build-verified.

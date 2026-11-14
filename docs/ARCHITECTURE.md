@@ -95,13 +95,13 @@ Redis is optional: introduce only for a measured cache, distributed rate limiter
 
 ## Technology baseline
 
-- .NET 11 / ASP.NET Core 11 and matching stable EF Core 11, as specified in the project brief.
-- Stable C# language version supported by the selected SDK.
+- .NET 10 LTS / ASP.NET Core 10 and matching stable EF Core 10.
+- C# 14, as supported by the selected .NET 10 SDK.
 - PostgreSQL, xUnit, Docker Compose.
 - FluentValidation, Serilog and Swagger/OpenAPI where justified.
 - Pin compatible stable package versions; verify support and security advisories before adding dependencies.
 
-.NET 11 is STS, not LTS. This is an explicit trade-off against the requested version and must be reviewed before production and at each support-lifecycle review.
+The owner approved .NET 10 LTS as the runtime baseline on 2026-11-14. Keep the SDK/runtime and EF Core/provider on matching supported major versions and apply monthly servicing updates.
 
 ## Quality attributes
 

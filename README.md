@@ -20,9 +20,10 @@ Phase 0 architecture and technical design were explicitly approved on 2026-11-14
 
 ## Target stack
 
-- .NET 11 / ASP.NET Core 11 / C# 15
-- Entity Framework Core 11 (stable package)
-- PostgreSQL
+- .NET 10 LTS / ASP.NET Core 10 / C# 14
+- Entity Framework Core 10 (module-owned contexts)
+- Npgsql EF Core provider 10.0.3
+- PostgreSQL 18
 - Redis only when justified by a measured need
 - Docker Compose
 - xUnit
@@ -36,7 +37,7 @@ Single-vendor store targeting Iran initially. Store prices and canonical commerc
 ## Local development
 
 Prerequisites:
-- .NET SDK 11.0.100 or a compatible later 11.0 feature band
+- .NET SDK 10.0.404 or a compatible later 10.0 feature band
 - Docker Engine with Docker Compose plugin
 
 Start PostgreSQL and the API:
@@ -47,14 +48,21 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The API listens on `http://localhost:8080`; liveness is available at `/health/live` and the OpenAPI document at `/openapi/v1.json`.
+The API listens on `http://localhost:8080`. Liveness is available at `/health/live`; readiness at `/health/ready` verifies a real PostgreSQL connection and executes `SELECT 1`. The OpenAPI document is available at `/openapi/v1.json` in Development.
 
-To build and test without Docker:
+To run tests locally, start PostgreSQL first. The integration-test default connection string matches the checked-in `.env.example`; if you change its password, set `TEST_POSTGRES_CONNECTION_STRING` to the matching test database connection string before running tests. For example, on PowerShell:
+
+```powershell
+$env:TEST_POSTGRES_CONNECTION_STRING = "Host=127.0.0.1;Port=5432;Database=ecommerce;Username=ecommerce;Password=YOUR_LOCAL_PASSWORD"
+dotnet test Ecommerce.sln
+```
+
+Build and test commands:
 
 ```bash
 dotnet restore Ecommerce.sln
-dotnet build Ecommerce.sln --no-restore
-dotnet test Ecommerce.sln --no-build
+dotnet build Ecommerce.sln --configuration Release --no-restore
+dotnet test Ecommerce.sln --configuration Release --no-build
 ```
 
-The database provider and EF Core migration wiring are deliberately not declared complete until a stable Npgsql provider compatible with EF Core 11 is available. See [Phase 1 foundation notes](docs/PHASE-1-FOUNDATION.md).
+The EF Core 10 and Npgsql 10 provider versions are pinned centrally. Each business module will own its DbContext and migrations. The API host intentionally does not contain a shared commerce DbContext; the first real context and migration will be introduced with the module that owns its tables.
