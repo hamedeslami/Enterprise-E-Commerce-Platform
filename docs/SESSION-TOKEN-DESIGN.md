@@ -1,0 +1,225 @@
+# Session and Token Lifecycle Design
+
+**Status:** Proposed — design only. No authentication endpoints or token persistence have been implemented by this document. This design must be reviewed before implementation.
+
+## 1. Scope and non-goals
+
+This document defines browser session boundaries, access JWT issuance, opaque refresh-token rotation, replay handling, staff MFA pre-authentication state, logout/revocation, and the database invariants needed to make these operations concurrency-safe.
+
+It does not select a production frontend/API origin topology, cookie domain, signing-key hosting product, SMS vendor, or immediate access-token revocation mechanism. Those depend on deployment decisions and are listed as open decisions.
+
+The API is browser-facing and uses separate HttpOnly cookies for access and refresh credentials. Raw token values must never appear in JSON, URLs, browser storage, application logs, traces, or exception messages.
+
+## 2. Core decisions proposed
+
+1. **One session per authenticated browser/device.** A successful authentication creates an `AuthSession`; another device or browser gets a different session.
+2. **One refresh-token family per session.** A session has a linear chain of refresh-token records. At most one token in that chain may be active at a time.
+3. **Short-lived access JWT.** Initial target: 5 minutes, configurable up to 10 minutes. It is not refreshed in place; refresh issues a new access JWT.
+4. **Opaque refresh credential.** Generate a 256-bit cryptographically random secret. The browser receives an opaque value containing a public token identifier and the secret; the database stores only SHA-256(secret), never the secret.
+5. **Single-use rotation.** Every successful refresh consumes the presented token and creates exactly one successor in the same database transaction.
+6. **Strict replay response.** A valid, already-consumed refresh token is evidence of replay: revoke that session and its active refresh token. A token-ID match with a secret-hash mismatch is just an invalid credential and must not revoke the session.
+7. **Serialize refresh on the client.** The frontend must use a single-flight refresh operation so concurrent requests/tabs do not intentionally submit the same token simultaneously. Server-side conditional updates remain the authority.
+8. **Bounded access-token revocation delay.** Revoking a refresh session does not instantly invalidate a stateless access JWT already issued for it. Without a persisted session check, the residual window is at most the access-token lifetime.
+9. **Staff MFA is a separate pre-authentication transaction.** Password success for staff does not create a normal session or access/refresh cookies. A short-lived, purpose-bound MFA transaction is required until TOTP or a single-use recovery code succeeds.
+10. **Customer and staff assurance are explicit.** Session metadata records the authentication method/assurance that created it. Staff sessions can only be created after successful MFA.
+
+## 3. Conceptual persistence model
+
+All identifiers are application-generated UUIDv7. Exact EF property types, indexes and migrations will be specified in implementation design.
+
+### AuthSession
+
+One row per browser/device session.
+
+| Field | Purpose |
+|---|---|
+| Id | UUIDv7 session identifier; also the access JWT `sid` claim |
+| UserId | Identity user that owns the session |
+| ActorKind | Customer or Staff classification used by authentication policy |
+| AuthenticationMethod | Password, SmsOtp, PasswordTotp, or PasswordRecoveryCode |
+| AuthenticatedAt | Time the authentication ceremony completed |
+| CreatedAt | Session creation time |
+| LastSeenAt | Updated on successful refresh, not every API request |
+| AbsoluteExpiresAt | Hard upper bound; cannot be extended by refresh |
+| IdleExpiresAt | Sliding inactivity boundary, extended only by successful refresh |
+| RevokedAt | Null while session is not revoked |
+| RevocationReason | Controlled internal reason code; never client-supplied |
+| UserAgentHash / DeviceLabel | Optional, privacy-reviewed session display metadata; never trusted for authentication |
+
+A session is refreshable only when it is not revoked and both absolute and idle expiry checks pass. Use UTC instants. Do not treat an IP address or User-Agent as a secret or as proof of device identity.
+
+### RefreshToken
+
+One row per token in a session's rotation chain.
+
+| Field | Purpose |
+|---|---|
+| Id | UUIDv7 public token identifier |
+| SessionId | Owning AuthSession / token family |
+| SecretHash | SHA-256 hash of the 256-bit random secret; unique |
+| CreatedAt | Issuance time |
+| ExpiresAt | Token expiry, never later than session absolute expiry |
+| ConsumedAt | Set once by successful rotation |
+| RevokedAt | Set when session/family is revoked |
+| ReplacedByTokenId | Successor token ID after successful rotation |
+
+The browser token format is versioned and opaque, conceptually `v1.<token-id>.<base64url-secret>`. The token ID is only a lookup key, not an authenticator. Compare the stored hash with a constant-time comparison after strict format/length validation. Never log the presented value.
+
+Required database invariants:
+- Unique token ID and unique secret hash.
+- A foreign key from token to session.
+- At most one unconsumed, unrevoked refresh token per session (PostgreSQL partial unique index).
+- A consumed token has a consumption timestamp and, on successful rotation, a successor reference.
+- Rotation/revocation transitions are conditional and atomic; application-level read-then-write checks alone are insufficient.
+
+### StaffMfaTransaction
+
+Short-lived state after staff password validation and before MFA completion.
+
+| Field | Purpose |
+|---|---|
+| Id | UUIDv7 transaction identifier |
+| UserId | Staff Identity user |
+| SecretHash | Hash of a cryptographically random pre-authentication secret |
+| Purpose | Fixed value such as StaffSignInMfa; cannot be changed by the client |
+| CreatedAt / ExpiresAt | Short lifetime; proposed default 5 minutes |
+| FailedAttempts | Bounded TOTP/recovery verification attempts |
+| ConsumedAt | Single-use completion marker |
+| CancelledAt | Optional invalidation marker |
+
+The pre-authentication secret is delivered only in a separate HttpOnly cookie scoped as narrowly as practical to the MFA flow. It is not an access token, refresh token, or authenticated session. A successful TOTP/recovery verification atomically consumes this transaction and creates the normal AuthSession. Password-only staff login must never set normal session cookies.
+
+## 4. Access JWT
+
+### Claims
+
+Keep claims minimal:
+- `sub`: Identity user ID.
+- `sid`: AuthSession ID.
+- `jti`: unique JWT ID.
+- `iss`, `aud`, `iat`, `nbf`, `exp`.
+- `amr` or an equivalent controlled claim describing the completed authentication method/assurance, where required by policy.
+
+Do not accept client-supplied roles, permissions, user IDs or assurance values. Do not put PII, phone numbers, addresses or other unnecessary data in the JWT.
+
+Authorization claim strategy needs an explicit decision during implementation. If coarse roles are embedded, role changes can remain stale until the access JWT expires. Fine-grained permissions must not be trusted from a long-lived client-controlled source.
+
+### Validation
+
+Validate signature, a fixed allow-list of algorithms, issuer, audience, lifetime, not-before and key ID (`kid`). Reject unsigned tokens, algorithm confusion and unknown keys. Signing keys must be managed outside source control and support rotation with a documented overlap period. Do not reuse the ASP.NET Core Data Protection key ring as the JWT signing-key store without an explicit cryptographic/key-management design.
+
+The API extracts the access JWT from the configured access cookie. Do not also accept it from query strings. Whether non-browser bearer clients are supported is a separate API-client decision and must not weaken browser CSRF policy.
+
+## 5. Refresh rotation transaction
+
+Refresh is a state-changing, cookie-authenticated operation. It requires CSRF validation and trusted Origin checks.
+
+Proposed server algorithm:
+
+1. Parse the versioned token format and validate lengths/encoding before database work.
+2. Load the token row by token ID and its owning session.
+3. Verify the presented secret against `SecretHash` using constant-time comparison. On mismatch, return a generic unauthenticated response; do not revoke the session.
+4. Begin a PostgreSQL transaction.
+5. Atomically transition the token from active to consumed using a conditional update requiring: not consumed, not revoked, not expired. Also verify the session is active and both session expiry boundaries have not passed.
+6. Only the request that changes exactly one row may create a successor token row, link `ReplacedByTokenId`, update `LastSeenAt` and `IdleExpiresAt`, and commit.
+7. Return the new access JWT and refresh credential only through Set-Cookie response headers after the transaction commits.
+8. If the conditional transition affects zero rows, distinguish internally (without revealing details to the caller):
+   - Matching secret and token already consumed: replay detected; revoke the session and all active tokens in that session atomically.
+   - Token/session expired or revoked: reject and clear stale cookies.
+   - Secret mismatch: reject without revocation.
+9. Never issue a successor if the transaction fails or rolls back.
+
+A concurrent second use of the same valid token is treated as replay and revokes the session. This is intentionally strict. The frontend must coordinate refresh requests (single-flight across tabs where feasible). If the server commits rotation but the response is lost, retrying the old token may force re-authentication; this reliability/security trade-off must be documented and tested rather than hidden with an unsafe grace period.
+
+## 6. Session lifecycle and revocation
+
+### Creation
+
+- Customer password login: create session only after Identity password validation and account eligibility checks.
+- Customer SMS OTP login: create session only after atomic, purpose-bound OTP verification/consumption and verified-phone eligibility checks.
+- Staff login: password success creates only StaffMfaTransaction. Successful TOTP or recovery-code verification consumes the transaction and creates the session.
+- Never allow OTP login to register an account implicitly.
+
+### Refresh and expiry
+
+A refresh is allowed only if the session is active, the token is active, and token/session expiry checks pass. Idle expiry may slide on successful refresh, but absolute expiry never slides. Proposed initial session durations remain configurable and must be chosen before endpoint implementation; do not silently ship unlimited or effectively permanent sessions.
+
+### Logout and administrative revocation
+
+- Logout revokes the current session and all its active refresh tokens, then clears both cookies.
+- Session-list/revoke operations are scoped to the authenticated user; staff administration requires an explicit permission and audit event.
+- Password reset/change, account disablement, credential compromise, staff MFA reset and security-sensitive account recovery revoke relevant sessions. The exact policy (all sessions vs current session) must be explicit per event; default to all sessions for credential-compromise events.
+- Revoke only the affected session on refresh-token reuse, not every session belonging to the user, unless additional compromise evidence justifies broader revocation.
+- Session revocation does not immediately invalidate already-issued stateless JWTs. Initial accepted residual validity is the remaining access-token lifetime (target 5 minutes). Immediate revocation would require a per-request or cached session-version/revocation check with explicit failure behavior and performance tests.
+
+## 7. Cookies and CSRF boundary
+
+Cookie names, Domain, SameSite and exact paths are intentionally not finalized until frontend/API deployment topology is known.
+
+Required properties:
+- Access and refresh credentials are separate cookies, both HttpOnly.
+- Secure is mandatory in production.
+- Prefer host-only cookies; set Domain only when the topology proves it is required.
+- Use explicit Path, expiry and SameSite values.
+- Cross-site deployment requires SameSite=None; Secure and robust CSRF protection.
+- Browser refresh, logout and all unsafe cookie-authenticated requests require anti-forgery validation and trusted Origin validation.
+- CORS must use exact allowed origins; never combine wildcard origins with credentials.
+- Clear cookies with the same Path/Domain/SameSite attributes used to set them.
+- Use a separate short-lived MFA transaction cookie; do not reuse the refresh cookie for pre-authentication.
+
+A `__Host-` cookie prefix is a strong option when the deployment can satisfy its requirements (Secure, Path=/, no Domain). Local HTTP development may require a separate development-only configuration; production security flags must not be weakened to accommodate local development.
+
+## 8. Key and secret separation
+
+Keep distinct key material and purposes:
+- JWT signing private key / verification public keys.
+- OTP HMAC secret.
+- TOTP secret-encryption protection (ASP.NET Core Data Protection or a reviewed equivalent).
+- Data Protection key ring for Identity providers and protected application payloads.
+- Refresh tokens and MFA transaction secrets generated with a cryptographic RNG; only their hashes persist.
+
+Secrets and key rings must be external to source control, access-controlled, backed up and rotated with a documented recovery plan. Production Data Protection keys must be persistent and shared by API instances that need to unprotect the same payloads. Key storage/encryption provider is still a deployment decision.
+
+## 9. Required tests before approval
+
+### Unit tests
+- Token generation has at least 256 bits of cryptographic entropy and uses strict base64url encoding.
+- Only the secret hash is persisted; raw secrets never enter logs or DTOs.
+- JWT validation rejects wrong issuer/audience, expiry, not-before, bad signature, disallowed algorithm and unknown key ID.
+- Session expiry and revocation rules are deterministic under an injected clock.
+- Staff password validation alone cannot create an AuthSession.
+
+### PostgreSQL integration/concurrency tests
+- Successful refresh consumes the old token and creates exactly one successor in one transaction.
+- Two concurrent refreshes with the same valid token produce at most one successor; the replay policy revokes the session.
+- Wrong secret with a known token ID does not revoke the session.
+- Reuse of a consumed token revokes its session and active successor.
+- Expired/revoked session or token cannot rotate.
+- Logout/revocation is idempotent.
+- Credential-security events revoke the configured session scope.
+- A failed transaction leaves no consumed-without-successor partial state.
+- MFA transaction is purpose-bound, expires, has bounded attempts and can be consumed only once.
+- A successful MFA transaction creates one staff session; replay cannot create another.
+
+### HTTP/security integration tests
+- Access/refresh/MFA secrets are never returned in JSON.
+- Cookie flags, paths, expiries and clearing behavior match the configured topology.
+- Missing/invalid CSRF token and untrusted/missing Origin are rejected on unsafe browser routes.
+- CORS rejects unlisted origins and never reflects arbitrary origins with credentials.
+- Refresh errors do not disclose whether a user/session/token exists.
+- Logs and Problem Details contain no credentials or sensitive token material.
+
+## 10. Decisions required before implementation
+
+These are intentionally not guessed in this design:
+
+1. **Frontend/API topology:** same-origin, same-site subdomains, or truly cross-site. This determines SameSite, cookie Path/Domain and CORS.
+2. **Session durations:** absolute lifetime and idle lifetime separately for customers and staff. Access JWT remains 5 minutes initially unless tests/operations justify another value.
+3. **JWT signing-key deployment:** asymmetric key and managed secret/KMS/HSM approach, including key rotation ownership.
+4. **Role/permission freshness:** short-lived role snapshot in JWT versus database-backed authorization checks for selected sensitive operations.
+5. **Session concurrency UX:** confirm strict replay revocation and frontend single-flight coordination, including the lost-refresh-response re-authentication behavior.
+6. **Staff/customer account classification:** define how an Identity user is classified and how staff privileges are prevented from bypassing the mandatory MFA path.
+7. **Session management UX:** which device metadata is shown to users, and whether customers may revoke other sessions.
+8. **MFA transaction cookie and antiforgery bootstrap contract:** finalize names/paths/header only after the deployment topology is known.
+
+No authentication code should be implemented until these decisions are reviewed and the blocking items above are resolved.
