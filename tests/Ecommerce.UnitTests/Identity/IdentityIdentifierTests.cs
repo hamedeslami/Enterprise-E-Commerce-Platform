@@ -1,4 +1,6 @@
 using Ecommerce.Modules.Identity.Domain;
+using Ecommerce.Modules.Identity.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Ecommerce.UnitTests.Identity;
@@ -21,9 +23,30 @@ public sealed class IdentityIdentifierTests
         AssertUuidV7(role.Id);
     }
 
+    [Fact]
+    public void Context_RejectsNonUuidV7UserIdentifier()
+    {
+        var options = new DbContextOptionsBuilder<IdentityDbContext>()
+            .UseNpgsql("Host=localhost;Database=ecommerce;Username=ecommerce;Password=not-used")
+            .Options;
+
+        using var context = new IdentityDbContext(options);
+        var user = new ApplicationUser
+        {
+            Id = Guid.Parse("8f4f0d40-4f2b-4a14-a3b7-5c1d1a3f1001")
+        };
+
+        context.Users.Add(user);
+
+        Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
+    }
+
     private static void AssertUuidV7(Guid value)
     {
         Assert.NotEqual(Guid.Empty, value);
-        Assert.Equal('7', value.ToString("N")[12]);
+
+        var formatted = value.ToString("N");
+        Assert.Equal('7', formatted[12]);
+        Assert.Contains(formatted[16], new[] { '8', '9', 'a', 'b' });
     }
 }
