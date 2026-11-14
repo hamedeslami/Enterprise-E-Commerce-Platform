@@ -52,6 +52,15 @@ One row per browser/device session.
 
 A session is refreshable only when it is not revoked and both absolute and idle expiry checks pass. Use UTC instants. Do not treat an IP address or User-Agent as a secret or as proof of device identity.
 
+### Session management UX and device metadata (approved)
+
+- Authenticated customers may list only their own active sessions and see which one is the current session.
+- The customer session list may show a coarse device/browser label, session creation time, last successful refresh time, and authentication method. Labels are informational hints derived from User-Agent data; they are not device identity or an authentication factor.
+- Do not display IP addresses in the initial customer session UI. Do not use IP address or raw User-Agent as proof of identity. Avoid retaining raw User-Agent longer than operationally necessary; persist only a normalized display label or a privacy-reviewed representation.
+- A customer may revoke any of their other sessions while preserving the current session. Provide a separate, explicit “sign out all devices” action that revokes every session, including the current one. Both operations must be authenticated, CSRF-protected, ownership-scoped, atomic/idempotent as appropriate, and audited.
+- Staff session revocation by another staff member is restricted to an explicit security-administration permission, is ownership/target-scoped by server policy, and must emit an audit event. Staff must also be able to revoke their own other sessions; “sign out all devices” follows the same explicit all-session semantics.
+- Session metadata is for user awareness and support only. It must not silently become a risk score, authorization input, or security factor without a separate reviewed design.
+
 ### Initial session lifetime policy
 
 The following defaults are approved for the initial implementation and must remain configurable through validated server-side configuration:
@@ -270,12 +279,13 @@ Secrets and key rings must be external to source control, access-controlled, bac
 2. **Account classification:** every Identity user has exactly one explicit server-controlled `AccountType`: `Customer` or `Staff`, independent of roles. Authentication endpoints enforce the matching type. Client input cannot assign or change it.
 3. **Authorization:** use server-issued JWT role claims for API authorization, with policy requirements mapped to those roles and no per-request Identity database lookup in the initial model. Role-assignment changes take effect for an existing token only when it expires; the 5-minute access-token lifetime (plus configured clock skew) bounds the normal stale-authorization window. This is an intentional trade-off, not immediate revocation.
 4. **Session duration:** customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep configurable. Access JWT target remains 5 minutes.
+6. **Session management UX and device metadata:** customers can view their own sessions with coarse device/browser label, creation time, last successful refresh and authentication method; IP is not shown. Customers can revoke other sessions while preserving the current one, or explicitly sign out all devices. Staff session revocation by another staff member requires a dedicated security-administration permission and audit event. Metadata is informational, not an authentication factor.
+
 5. **Browser topology and cookie baseline:** `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact-origin credentialed CORS and CSRF/Origin validation.
 
 ### Remaining decisions / implementation prerequisites
 
-1. **Session management UX:** decide which device metadata is shown to users and whether customers may revoke other sessions.
-2. **MFA transaction cookie and antiforgery bootstrap contract:** finalize transaction-cookie scope and CSRF token delivery/validation before implementing endpoints.
-3. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
+1. **MFA transaction cookie and antiforgery bootstrap contract:** finalize transaction-cookie scope and CSRF token delivery/validation before implementing endpoints.
+2. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
 
 No authentication code should be implemented until the remaining prerequisites are reviewed and the security contracts are complete.
