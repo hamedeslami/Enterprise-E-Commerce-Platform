@@ -13,7 +13,7 @@ on:
       - ".config/dotnet-tools.json"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-migration:
@@ -35,6 +35,11 @@ jobs:
 
       - name: Generate Identity migration
         run: |
+          if compgen -G "src/Modules/Identity/Persistence/Migrations/*_InitialIdentitySchema.cs" > /dev/null; then
+            echo "Initial Identity migration already exists; reusing committed files."
+            exit 0
+          fi
+
           dotnet ef migrations add InitialIdentitySchema \
             --project src/Modules/Identity/Identity.csproj \
             --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \
@@ -48,6 +53,16 @@ jobs:
             --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \
             --context IdentityDbContext \
             --output migration.sql
+
+      - name: Commit generated migration to the current branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Modules/Identity/Persistence/Migrations/
+          if ! git diff --cached --quiet; then
+            git commit -m "Add generated Initial Identity EF migration"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
       - name: Upload generated migration
         uses: actions/upload-artifact@v4
