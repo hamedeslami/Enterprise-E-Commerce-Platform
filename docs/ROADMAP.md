@@ -1,38 +1,47 @@
 # Delivery Roadmap
 
-**Status:** Phase 0 approved by the owner on 2026-11-14. Phase 1 implementation and verification have passed CI; PR #5 adds the final Compose smoke-test workflow and is awaiting merge. Complete and verify each phase, report actual results, then wait for explicit user approval before moving on.
+**Status:** Phase 0 approved. Phase 1 implemented, verified and merged. Phase 2 (Identity and Security) approved and in progress. Complete and verify each phase, report actual results, then wait for explicit user approval before moving on.
 
 ## Phase 0 — Architecture and technical design
 
-Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SECURITY.md and ROADMAP.md. Confirm scope, module boundaries, data ownership, invariants, security and test strategy. Confirmed foundation decisions: UUIDv7 identifiers; Persian (`fa-IR`) store locale; `Asia/Tehran` store timezone with UTC persistence; PostgreSQL `ReservedQuantity` counter maintained atomically with reservation records. No production application code.
+Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SECURITY.md and ROADMAP.md. Confirm scope, module boundaries, data ownership, invariants, security and test strategy. Confirmed foundation decisions: UUIDv7 identifiers; Persian (`fa-IR`) locale; `Asia/Tehran` timezone with UTC persistence; PostgreSQL `ReservedQuantity` counter maintained atomically with reservation records.
 
 **Exit:** user approves design and resolves decisions blocking foundation. **Complete.**
 
 ## Phase 1 — Project foundation
 
-**Status:** Implemented and verified by GitHub Actions run [#54](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/actions/runs/43584199385); PR #5 containing the Compose smoke-test workflow is awaiting merge.
+**Status:** Complete. PR #5 is merged into `main`; GitHub Actions run [#54](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/actions/runs/43584199385) passed both `build-and-test` and `compose-smoke-test`.
 
-Solution/module skeleton; dependency registration; configuration/options validation; PostgreSQL connection pooling and readiness checks; EF Core 10/Npgsql 10 version alignment for module-owned persistence; structured logging; exception handling/Problem Details; OpenAPI; Docker Compose; unit/integration tests and CI build.
+Solution/build configuration; API host; options validation; PostgreSQL connection pooling/readiness; structured logging; Problem Details; OpenAPI; Docker Compose; unit/integration tests and CI. First module that owns persisted tables introduces its own DbContext, design-time factory and migration; migrations are applied as a controlled deployment step.
 
-**Verification passed:** Release restore/build, unit and PostgreSQL-backed integration tests, Docker Compose build/start, API liveness, database readiness query, Development OpenAPI and Compose teardown.
-
-**Exit:** complete after PR #5 is merged. Do not create an empty shared DbContext or artificial migration: the first module that owns persisted tables must introduce its own DbContext, design-time factory and migration, then apply it through the controlled migration deployment process.
+**Exit:** merged and verified. **Complete.**
 
 ## Phase 2 — Identity and security
 
-Identity lifecycle, initial roles/permissions, login/logout, access/refresh cookies, rotation/reuse detection, session revocation, CSRF, Origin, CORS, rate limits, security headers, ownership policies and audit events.
+**Status:** Approved and in progress on `phase-2/identity-security`.
 
-**Exit:** auth, CSRF, replay, role, IDOR and cookie tests pass; no unresolved critical/high security findings.
+- Customer login with username/password or SMS OTP to a previously verified mobile number.
+- Staff login with username/password plus mandatory TOTP MFA; no SMS OTP for staff MFA.
+- ASP.NET Core Identity for password/account primitives.
+- Identity-owned DbContext/schema/migrations.
+- JWT access and opaque refresh tokens in separate HttpOnly cookies; refresh rotation, reuse detection and session revocation.
+- CSRF, trusted Origin, exact CORS allow-list, secure cookie policy and security headers.
+- Initial roles/permissions and staff/customer resource authorization.
+- OTP challenge lifecycle, HMAC storage, purpose binding, expiry, single-use and atomic attempt handling.
+- Per-phone, IP/network and global SMS quotas; edge/WAF controls, risk-based CAPTCHA, provider circuit breaker and spend budget.
+- Auditing and security-focused tests.
+
+**Exit:** auth, MFA, OTP, CSRF, replay, quota concurrency, role, IDOR, cookie and session tests pass; no unresolved critical/high security findings. This does not replace an independent production security review.
 
 ## Phase 3 — Catalog and inventory
 
-Product types, variants, attributes, categories, brands, media metadata, inventory, movements, reservations, configurable backorder policy, concurrency-safe stock allocation, storefront browse/search and admin catalog APIs. Reservation TTL defaults to 15 minutes and is configurable at store level; unpaid expired reservations are released idempotently. Backorders are configurable per product/variant and default to disabled (`NoBackorders`); supported modes are `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`. Variant-level policy overrides the product-level policy. Products/variants may disable stock management where stock tracking is not applicable.
+Product types, variants, attributes, categories, brands, media metadata, inventory, movements, reservations, configurable backorder policy, concurrency-safe stock allocation, storefront browse/search and admin catalog APIs. Reservation TTL defaults to 15 minutes and is configurable at store level; unpaid expired reservations are released idempotently. Backorders are configurable per product/variant, disabled by default (`NoBackorders`); supported modes are `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`; variant-level policy overrides product policy. Stock management can be disabled where physical stock tracking is not applicable.
 
 **Exit:** catalog/stock rules, migrations, API, authorization and concurrent stock tests pass.
 
 ## Phase 4 — Pricing, taxes and promotions
 
-Price resolution, scheduled sale prices, market-specific tax configuration/calculation, coupons, restrictions, redemption limits and automatic promotions. Persisted and API-facing monetary amounts are whole toman integers; finalize and test the rounding rule for percentage/rate calculations before implementation.
+Price resolution, scheduled sale prices, market-specific tax configuration/calculation, coupons, restrictions, redemption limits and automatic promotions. Persisted/API monetary amounts are whole toman integers; finalize and test rounding before implementation.
 
 **Exit:** deterministic whole-toman rounding/tax/stacking and concurrent coupon tests pass.
 
@@ -46,7 +55,7 @@ Customer profiles/addresses, guest/authenticated carts, login merge, server-side
 
 Checkout orchestration/idempotency, stock reservation, order creation, immutable snapshots, state transitions, cancellation, notes and refund domain records.
 
-**Exit:** duplicate checkout, stock race (including simultaneous requests against a final unit), backorder policy, configurable 15-minute-default reservation expiry, idempotent release, state transition and snapshot tests pass.
+**Exit:** duplicate checkout, stock race (including simultaneous requests against a final unit), backorder policy, reservation expiry/release, state transition and snapshot tests pass.
 
 ## Phase 7 — Payments and shipping
 
@@ -72,11 +81,11 @@ For each phase: state scope and decisions, list changed files, implement, run bu
 
 ## Decisions deferred to relevant phases
 
-- **Before Phase 3:** SKU uniqueness scope; whether fractional inventory is supported; stock behavior for grouped, virtual, downloadable and external products.
-- **Before Phase 4:** whole-toman rounding rule for percentage/rate calculations; applicable Iranian tax rules and tax-inclusive/exclusive pricing.
+- **Phase 2:** Iranian SMS provider; exact frontend/API origin topology; production WAF/CDN; Redis adoption only if measured need.
+- **Before Phase 3:** SKU uniqueness scope; fractional inventory; stock behavior for grouped, virtual, downloadable and external products.
+- **Before Phase 4:** whole-toman rounding; applicable Iranian tax rules and tax-inclusive/exclusive pricing.
 - **Before Phase 5:** guest checkout; Iranian billing/shipping address model.
-- **Before frontend integration:** exact frontend/API origin topology and cookie/CSRF/CORS configuration.
-- **Before Phase 7 / Notifications / Media implementation:** initial payment, shipping, email/SMS and media-storage providers.
+- **Before Phase 7 / Notifications / Media:** initial payment, shipping, email/SMS and media-storage providers.
 - **Before release:** data retention/privacy requirements and deployment-specific operational settings.
 
 Do not block foundation work on decisions that do not affect it. Do not silently invent deferred business rules.
