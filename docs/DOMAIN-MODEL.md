@@ -23,7 +23,7 @@ Product (name, slug, descriptions, type, publication/visibility, SKU policy, bra
 StockItem (purchasable product/variant reference, on-hand, reserved and backorder policy); StockReservation (quantity, expiry, status and checkout/order reference); StockMovement (append-only adjustment/sale/restock/reservation-release history). Available stock is derived from on-hand less active reservations, subject to backorder policy. Concurrent reservations must not oversell when backorders are disabled.
 
 ### Pricing, taxes and promotions
-Price (amount, currency, regular/sale values and schedule); TaxClass, TaxRate and TaxRule; Coupon (discount type/value, validity, usage limits and customer/product/category restrictions); Promotion (automatic rule with eligibility and stacking policy). Calculations are server-owned. Currency, rounding, tax-inclusive/exclusive behavior and stacking must be configured.
+Price (amount denominated in toman for the initial Iranian store, regular/sale values and schedule); TaxClass, TaxRate and TaxRule; Coupon (discount type/value, validity, usage limits and customer/product/category restrictions); Promotion (automatic rule with eligibility and stacking policy). Calculations are server-owned. Toman precision/rounding, applicable Iranian tax rules, tax-inclusive/exclusive behavior and discount stacking must be explicitly configured. Do not treat toman as an ISO 4217 code; payment-provider unit conversion belongs in the provider adapter.
 
 ### Customers and cart
 CustomerProfile linked to an Identity user when registered; guest identity is not an account. CustomerAddress with billing/shipping type. Cart (user or opaque guest owner, status, currency, expiry) and CartItem (purchasable reference, quantity, selected variant/options). Cart prices are recalculable, never authoritative order prices. Login merge revalidates stock, variant, price and promotions.
@@ -64,4 +64,4 @@ Transitions require guards and history. Product publication vocabulary is to be 
 
 ## Open domain decisions
 
-Confirm currency/rounding, guest checkout, downloadable product authorization/expiry, reservation TTL, backorder policy, coupon stacking, review eligibility, address localization and whether paid orders may be edited. Do not guess these rules.
+Confirm toman precision/rounding (including whether fractional toman amounts are ever allowed), applicable Iranian tax rules and tax-inclusive/exclusive pricing, guest checkout, downloadable product authorization/expiry, reservation TTL, backorder policy, coupon stacking, review eligibility, address localization and whether paid orders may be edited. Do not guess these rules.
