@@ -24,21 +24,62 @@ public sealed class IdentityIdentifierTests
     }
 
     [Fact]
-    public void Context_RejectsNonUuidV7UserIdentifier()
+    public void Context_RejectsNonUuidV7UserIdentifier_OnSaveChanges()
+    {
+        using var context = CreateContext();
+        context.Users.Add(new ApplicationUser
+        {
+            Id = Guid.Parse("8f4f0d40-4f2b-4a14-a3b7-5c1d1a3f1001")
+        });
+
+        Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public void Context_RejectsNonUuidV7RoleIdentifier_OnSaveChanges()
+    {
+        using var context = CreateContext();
+        context.Roles.Add(new ApplicationRole
+        {
+            Id = Guid.Parse("8f4f0d40-4f2b-4a14-a3b7-5c1d1a3f1001")
+        });
+
+        Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
+    }
+
+    [Fact]
+    public async Task Context_RejectsNonUuidV7UserIdentifier_OnSaveChangesAsync()
+    {
+        await using var context = CreateContext();
+        context.Users.Add(new ApplicationUser
+        {
+            Id = Guid.Parse("8f4f0d40-4f2b-4a14-a3b7-5c1d1a3f1001")
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Context_RejectsNonUuidV7RoleIdentifier_OnSaveChangesAsync()
+    {
+        await using var context = CreateContext();
+        context.Roles.Add(new ApplicationRole
+        {
+            Id = Guid.Parse("8f4f0d40-4f2b-4a14-a3b7-5c1d1a3f1001")
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.SaveChangesAsync());
+    }
+
+    private static IdentityDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<IdentityDbContext>()
             .UseNpgsql("Host=localhost;Database=ecommerce;Username=ecommerce;Password=not-used")
             .Options;
 
-        using var context = new IdentityDbContext(options);
-        var user = new ApplicationUser
-        {
-            Id = Guid.Parse("8f4f0d40-4f2b-4a14-a3b7-5c1d1a3f1001")
-        };
-
-        context.Users.Add(user);
-
-        Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
+        return new IdentityDbContext(options);
     }
 
     private static void AssertUuidV7(Guid value)
