@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy are approved. Identity persistence foundation and its generated initial EF migration are committed on `phase-2/identity-security`; PostgreSQL migration verification is running through CI.
+**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy are approved. Identity persistence foundation and its initial EF migration are implemented on `phase-2/identity-security`; the latest CI run passed PostgreSQL migration integration tests and Docker Compose smoke tests. Authentication endpoints are not implemented yet.
 
 ## Repository
 
@@ -51,7 +51,8 @@
 - Generated the initial EF migration, Designer and ModelSnapshot using GitHub Actions (no local .NET installation required) and committed them to the Phase 2 branch.
 - Added an integration test that applies the migration to the CI PostgreSQL database and verifies the migration history and users table.
 - Added Data Protection registration; production still requires a persistent, protected shared key ring.
-- **Not yet complete:** wait for PostgreSQL migration integration tests and the complete CI run to pass. No authentication endpoints have been implemented yet.
+- Identity persistence slice 1 is implemented and verified: the PostgreSQL migration integration test and the complete CI pipeline passed on the latest Phase 2 commit.
+- No authentication endpoints have been implemented yet; customer login/OTP, staff MFA, sessions/tokens, cookies, CSRF and authorization remain subsequent implementation work.
 
 ## Phase 2 scope
 
