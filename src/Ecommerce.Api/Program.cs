@@ -1,6 +1,7 @@
 using Ecommerce.Api;
 using Ecommerce.Api.Health;
 using Ecommerce.BuildingBlocks;
+using Ecommerce.Modules.Identity;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -49,6 +50,7 @@ builder.Services
     .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"]);
 
 builder.Services.AddBuildingBlocks(builder.Configuration);
+builder.Services.AddIdentityModule(builder.Configuration);
 builder.Services.AddValidatorsFromAssemblyContaining<ApiAssemblyMarker>();
 
 var app = builder.Build();
