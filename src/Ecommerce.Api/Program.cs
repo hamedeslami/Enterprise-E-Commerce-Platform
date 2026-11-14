@@ -32,7 +32,10 @@ builder.Services.AddValidatorsFromAssemblyContaining<ApiAssemblyMarker>();
 var app = builder.Build();
 
 app.UseExceptionHandler();
-app.MapOpenApi();
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("live")
