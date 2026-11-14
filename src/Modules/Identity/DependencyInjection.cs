@@ -1,6 +1,7 @@
 using Ecommerce.Modules.Identity.Domain;
 using Ecommerce.Modules.Identity.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -12,6 +13,9 @@ public static class DependencyInjection
     public static IServiceCollection AddIdentityModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        services.AddDataProtection();
+
         services.AddDbContext<IdentityDbContext>((serviceProvider, options) =>
         {
             var dataSource = serviceProvider.GetRequiredService<NpgsqlDataSource>();
