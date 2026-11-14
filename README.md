@@ -20,8 +20,9 @@ Phase 0 architecture and technical design were explicitly approved on 2026-11-14
 
 ## Target stack
 
-- .NET 11 / ASP.NET Core 11 / C# 15
-- Entity Framework Core 11 (stable package)
+- .NET 10 LTS / ASP.NET Core 10 / C# 14
+- Entity Framework Core 10
+- Npgsql EF Core provider 10.0.3
 - PostgreSQL
 - Redis only when justified by a measured need
 - Docker Compose
@@ -36,7 +37,7 @@ Single-vendor store targeting Iran initially. Store prices and canonical commerc
 ## Local development
 
 Prerequisites:
-- .NET SDK 11.0.100 or a compatible later 11.0 feature band
+- .NET SDK 10.0.404 or a compatible later 10.0 feature band
 - Docker Engine with Docker Compose plugin
 
 Start PostgreSQL and the API:
@@ -57,4 +58,4 @@ dotnet build Ecommerce.sln --no-restore
 dotnet test Ecommerce.sln --no-build
 ```
 
-The database provider and EF Core migration wiring are deliberately not declared complete until a stable Npgsql provider compatible with EF Core 11 is available. See [Phase 1 foundation notes](docs/PHASE-1-FOUNDATION.md).
+The EF Core 10 and Npgsql 10 provider versions are pinned centrally. Module-owned DbContexts, migrations and PostgreSQL connectivity verification remain part of Phase 1 implementation.
