@@ -1,6 +1,6 @@
 # Security Architecture and Threat Model
 
-**Status:** Proposed, Phase 0. This document is a design baseline, not a security certification or claim of production readiness.
+**Status:** Active design baseline, Phase 0/2. This document is not a security certification or claim of production readiness.
 
 ## Assets and trust boundaries
 
@@ -12,12 +12,24 @@ Boundaries: browser to public API; storefront to admin API; API to PostgreSQL/op
 
 Use ASP.NET Core Identity for password hashing, account lifecycle and supported identity primitives unless a documented limitation justifies another choice.
 
+### Customer sign-in
+
+Support username/password and SMS OTP. SMS OTP is sent only to a previously verified mobile number and does not implicitly create an account. Registration and phone verification are explicit flows. OTP request responses must not disclose whether a phone number is registered.
+
+### Staff sign-in and MFA
+
+All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. Do not permit SMS OTP as a staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited. Do not issue a normal session after password validation alone: use a short-lived MFA transaction and issue session cookies only after TOTP or a single-use recovery code succeeds.
+
+TOTP secrets are encrypted at rest. Enrollment requires confirmation of a generated code before MFA becomes active. Recovery codes are stored only as hashes, are single-use, and their use/reset is audited. Staff MFA recovery must not provide an unauthenticated bypass.
+
+### Access and refresh tokens
+
 Issue short-lived signed JWT access tokens and opaque cryptographically random refresh tokens. Store both only in separate HttpOnly cookies. Never expose token values in JSON, local/session storage, URLs or logs.
 
 Access token:
 - Initial target lifetime 5–10 minutes, configurable.
 - Validate signature, issuer, audience, lifetime and allowed algorithm.
-- Minimal claims: subject, session ID, issued/expiry times and token ID; no sensitive PII.
+- Minimal claims: subject, session ID, issued/expiry times and token ID; include authentication assurance/method only where needed for policy.
 - Key rotation uses key identifiers and documented overlap.
 
 Refresh token:
@@ -44,9 +56,36 @@ Refresh token:
 
 ## Authorization
 
-Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, SupportAgent. Roles group permissions; policies enforce specific permissions and resource context.
+Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, SupportAgent. Roles group permissions; policies enforce specific permissions and resource context. Staff-only endpoints require staff permissions and completed MFA. Customers access only their own profiles, addresses, carts and orders. Guest access uses scoped high-entropy capabilities with limited lifetime, never account privileges. Never trust client role/user ID/ownership/price/stock/discount/payment state. Test horizontal and vertical escalation and IDOR.
 
-Admin routes require staff permissions, not merely authentication. Customers access only their own profiles, addresses, carts and orders. Guest access uses scoped high-entropy capabilities with limited lifetime, never account privileges. Never trust client role/user ID/ownership/price/stock/discount/payment state. Test horizontal and vertical escalation and IDOR.
+## OTP and authentication abuse controls
+
+### OTP challenge security
+
+Customer SMS OTP is purpose-bound (for example, login, registration verification or phone verification), tied to one normalized verified phone/account and one challenge. Generate six-digit values with a cryptographically secure RNG. Challenge lifetime defaults to two minutes; resend cooldown defaults to 60 seconds; maximum failed verification attempts defaults to five. New challenges invalidate prior active challenges for the same purpose according to an atomic database rule.
+
+A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state; never persist or log raw codes. Verification, attempt increments and single-use consumption must be atomic in PostgreSQL.
+
+### Initial configurable quotas
+
+- Per normalized phone: maximum five sends per rolling hour and ten per rolling 24 hours.
+- Per phone: minimum 60 seconds between sends.
+- Per challenge: maximum five failed verification attempts.
+- Per IP/network: endpoint-specific request limits, configured with correct trusted-proxy handling.
+- Global: provider concurrency, throughput and daily message/spend budget.
+
+These are starting values to tune against actual traffic and provider constraints. Apply rate limiting before provider calls and account lookup where possible. Return generic responses to prevent account enumeration.
+
+### Layered abuse and DDoS controls
+
+- Network edge/WAF/reverse proxy limits, connection/request-size controls and upstream DDoS mitigation.
+- ASP.NET Core rate limiting for coarse per-IP/network limits. It is not a substitute for edge DDoS protection.
+- Shared atomic PostgreSQL quotas for per-phone and global SMS budgets so multiple API instances cannot bypass limits. Do not rely solely on per-process in-memory counters.
+- CAPTCHA/proof-of-human challenges when risk thresholds are crossed, as an additional control rather than the primary limiter.
+- Provider circuit breaker, bounded concurrency, strict spend ceiling and no unbounded retries.
+- Progressive throttling instead of permanent account lockout that can be weaponized.
+- Alerts for IP/phone fan-out, failure spikes, unusual send rates and provider spend.
+- Redis may be added later if measured traffic requires distributed rate limiting; define behavior during Redis outage before adoption.
 
 ## Abuse and application defenses
 
@@ -58,8 +97,8 @@ Admin routes require staff permissions, not merely authentication. Customers acc
 - Security headers: HSTS in production, nosniff, frame policy, referrer policy and restrictive CSP where applicable.
 - HTTPS and correctly configured forwarded headers.
 - Secrets outside source control using environment/secret manager; rotate and restrict access.
-- Redact credentials, tokens, payment data and sensitive PII from logs/traces.
-- Audit privileged admin actions and apply least privilege.
+- Redact credentials, tokens, OTPs, phone numbers where not needed, payment data and sensitive PII from logs/traces.
+- Audit privileged admin actions, MFA recovery, staff session revocation and apply least privilege.
 
 ## Upload security
 
@@ -81,7 +120,10 @@ Minimize PII and define retention, deletion/export and backup retention for targ
 | Refresh replay | Hash-only storage, rotation, family detection | Concurrent refresh/replay tests |
 | CSRF | Anti-forgery, Origin, SameSite, strict CORS | Missing token/hostile origin tests |
 | XSS/token theft | HttpOnly, output encoding, CSP | Security review/integration |
-| IDOR/escalation | Policies, ownership, deny by default | Cross-user/role matrix tests |
+| IDOR/escalation | Policies, ownership, deny by default | Cross-user/role tests |
+| OTP brute force | HMAC, expiry, attempt budget, single use | Expiry/replay/concurrent verification |
+| SMS pumping/cost abuse | Phone/IP/global quotas, CAPTCHA, spend budget | Concurrent quota/provider tests |
+| DDoS | Edge mitigation, app throttles, bounded provider calls | Load/operational review |
 | Price/stock tampering | Server calculations, constraints, concurrency | Tampering/concurrent purchase tests |
 | Duplicate checkout/payment | Idempotency, unique constraints, state machine | Duplicate request/webhook tests |
 | Malicious upload | Content validation, limits, generated keys | Oversize/traversal/content tests |

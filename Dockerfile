@@ -4,6 +4,7 @@ WORKDIR /src
 COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY Ecommerce.sln ./
 COPY src/BuildingBlocks/BuildingBlocks.csproj src/BuildingBlocks/
+COPY src/Modules/Identity/Identity.csproj src/Modules/Identity/
 COPY src/Ecommerce.Api/Ecommerce.Api.csproj src/Ecommerce.Api/
 COPY tests/Ecommerce.UnitTests/Ecommerce.UnitTests.csproj tests/Ecommerce.UnitTests/
 COPY tests/Ecommerce.IntegrationTests/Ecommerce.IntegrationTests.csproj tests/Ecommerce.IntegrationTests/

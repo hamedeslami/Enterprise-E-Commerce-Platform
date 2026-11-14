@@ -1,6 +1,6 @@
 # API Design
 
-**Status:** Proposed, Phase 0. **Style:** REST/JSON over HTTPS. **Base path:** /api/v1.
+**Status:** Proposed, Phase 0/2. **Style:** REST/JSON over HTTPS. **Base path:** /api/v1.
 
 ## API surfaces
 
@@ -14,20 +14,19 @@ Separate storefront/customer operations from administration by route and policy.
 | Administration | /api/v1/admin/* |
 | Payment webhooks | /api/v1/webhooks/{provider} |
 
-Examples: GET /api/v1/store/products; GET /api/v1/store/products/{slug}; GET /api/v1/store/categories; GET/POST /api/v1/store/cart; POST /api/v1/store/checkout; GET /api/v1/account/orders; GET /api/v1/admin/orders; POST /api/v1/admin/products; PATCH /api/v1/admin/inventory/{stockItemId}; POST /api/v1/auth/login, /refresh and /logout.
+Examples: GET /api/v1/store/products; GET /api/v1/store/products/{slug}; GET /api/v1/store/categories; GET/POST /api/v1/store/cart; POST /api/v1/store/checkout; GET /api/v1/account/orders; GET /api/v1/admin/orders; POST /api/v1/admin/products; PATCH /api/v1/admin/inventory/{stockItemId}. Authentication routes are listed in the Phase 2 design and become contractual only when implemented.
 
 These are illustrative contracts, not a promise every endpoint ships in the first release. Use nouns and HTTP methods; use command endpoints only for genuine operations such as checkout, capture, refund, publish or cancel.
 
 ## HTTP and representation
 
 - All commerce amounts (product prices, cart/order totals, taxes, discounts, payments and refunds) are whole-toman JSON integers. Fractional toman values are invalid. The API must document the amount unit explicitly; do not label toman with an ISO 4217 currency code.
-
 - HTTPS outside local development.
 - Explicit JSON DTOs; never serialize EF entities/domain aggregates.
 - Correct status codes: 200/201/202/204, 400, 401, 403, 404, 409, 422 where appropriate, 429 and 5xx.
 - RFC 9457 Problem Details with stable application error codes and safe details.
 - Never expose stack traces, SQL, provider secrets or sensitive data.
-- UTC ISO-8601 timestamps. Store-local schedule inputs/outputs use the configured `Asia/Tehran` timezone; the default user-facing locale is Persian (`fa-IR`). API clients must not infer timezone from server location.
+- UTC ISO-8601 timestamps. Store-local schedule inputs/outputs use configured `Asia/Tehran`; default user-facing locale is Persian (`fa-IR`).
 - Document enum values, compatibility behavior and deprecation policy.
 
 ## Pagination, filtering and sorting
@@ -44,6 +43,15 @@ Access and refresh tokens are separate HttpOnly cookies and are never returned i
 
 Unsafe methods require anti-forgery validation and trusted Origin checks. Define a bootstrap endpoint for anti-forgery token and a documented token cookie/header strategy; exact names and frontend fetch configuration are finalized before integration. CORS uses exact allow-listed origins, never wildcard with credentials.
 
+## Identity authentication policy (Phase 2)
+
+- Customers may sign in with username/password or SMS OTP sent only to a previously verified mobile number.
+- Staff (SuperAdmin, Admin, StoreManager, SupportAgent) must sign in with username/password and complete TOTP MFA. SMS OTP is not a staff MFA method.
+- Password-only staff authentication must not issue a normal access/refresh session. MFA transaction state is short-lived and purpose-limited.
+- OTP request responses must not disclose whether a phone number is registered. OTPs are purpose-bound, short-lived, single-use, attempt-limited and never returned in JSON/logs.
+- Authenticated browser requests use cookie credentials and CSRF defenses. Raw access/refresh token values are never returned in response bodies or browser storage.
+- See [Phase 2 Identity and Security](PHASE-2-IDENTITY-SECURITY.md) for initial OTP quotas, session behavior and verification requirements.
+
 ## Idempotency and concurrency
 
 Support/require Idempotency-Key for checkout, payment initiation, refunds and other retry-sensitive operations. Scope keys to actor/session and operation; persist request fingerprint and result with retention. Use ETags/If-Match or concurrency tokens for admin updates where lost updates matter. Return 409 for state conflicts.
@@ -56,4 +64,4 @@ Generate OpenAPI from actual contracts. Document cookie behavior, CSRF header, c
 
 ## Decisions pending
 
-Define the explicit API amount-unit field/contract for whole-toman integers; guest cart capability; Iranian address fields; frontend/API origin topology; and pagination-total requirements. Persian (`fa-IR`) is the default store locale and `Asia/Tehran` is the store timezone. UUIDv7 identifiers are used consistently and serialized as canonical UUID strings in JSON.
+Define the explicit API amount-unit field/contract for whole-toman integers; guest cart capability; Iranian address fields; frontend/API origin topology; and pagination-total requirements. SMS provider selection remains deferred until the Notifications/SMS provider decision. Persian (`fa-IR`) is the default store locale and `Asia/Tehran` is the store timezone. UUIDv7 identifiers are used consistently and serialized as canonical UUID strings in JSON.
