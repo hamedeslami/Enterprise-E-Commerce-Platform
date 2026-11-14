@@ -6,6 +6,30 @@
 
 Implement customer and staff identity on the existing API-first Modular Monolith foundation. Use one Identity module and shared session/token infrastructure, but apply different authentication policies to customers and staff. The browser-facing API uses separate HttpOnly access and refresh cookies with CSRF defenses.
 
+
+## Identity persistence foundation — implementation slice 1
+
+The first implementation slice now adds the \`Ecommerce.Modules.Identity\` project and registers it in the API host. It uses ASP.NET Core Identity with a module-owned EF Core context and the dedicated PostgreSQL \`identity\` schema. User and role constructors generate UUIDv7 identifiers; the context rejects newly added Identity users or roles whose identifiers are not UUIDv7 and maps those keys as application-generated (\`ValueGeneratedNever\`).
+
+Initial Identity password/lockout defaults are configured centrally in the module:
+- Minimum password length: 12.
+- Digit and lowercase required; uppercase and non-alphanumeric are not mandatory.
+- Identity lockout: 5 failed attempts and 15 minutes.
+- Email is not globally required because the initial customer account model is phone-first capable.
+
+The EF design-time factory and pinned \`dotnet-ef\` tool are included. Generate the initial migration from the repository root:
+
+\`\`\`bash
+dotnet tool restore
+dotnet ef migrations add InitialIdentitySchema \\
+  --project src/Modules/Identity/Identity.csproj \\
+  --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \\
+  --context IdentityDbContext \\
+  --output-dir Persistence/Migrations
+\`\`\`
+
+Do not run \`database update\` against a shared or production database as part of migration generation. Review and commit the generated migration and model snapshot, then verify it against an isolated PostgreSQL database in CI. The initial migration is not considered complete until those generated files are committed and the migration path is tested.
+
 ## Authentication policy
 
 ### Customers
