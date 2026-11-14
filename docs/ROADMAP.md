@@ -3,7 +3,7 @@
 **Status:** Proposed, Phase 0. Complete and verify each phase, report actual results, then wait for explicit user approval before moving on.
 
 ## Phase 0 — Architecture and technical design
-Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SECURITY.md and ROADMAP.md. Confirm scope, module boundaries, data ownership, invariants, security and test strategy. No production application code.
+Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SECURITY.md and ROADMAP.md. Confirm scope, module boundaries, data ownership, invariants, security and test strategy. Confirmed foundation decisions: UUIDv7 identifiers; Persian (`fa-IR`) store locale; `Asia/Tehran` store timezone with UTC persistence; PostgreSQL `ReservedQuantity` counter maintained atomically with reservation records. No production application code.
 **Exit:** user approves design and resolves decisions blocking foundation/schema.
 
 ## Phase 1 — Project foundation
@@ -46,6 +46,13 @@ Security/privacy/dependency review, performance/query plans/load tests, concurre
 
 For each phase: state scope and decisions, list changed files, implement, run build/tests, report exact commands and actual results, explain remaining issues, update docs/progress, and wait for approval. Never claim tests passed unless actually run. No fake critical providers or unexplained placeholders.
 
-## Open decisions
+## Decisions deferred to relevant phases
 
-Rounding policy for percentage/rate calculations that produce fractional toman results; applicable Iranian tax rules and tax-inclusive/exclusive pricing; guest checkout; store timezone; frontend/API origins; initial payment/shipping/email providers; media storage; SKU scope; fractional stock; Defer decisions until the phase where needed, but do not invent them.
+- **Before Phase 3:** SKU uniqueness scope; whether fractional inventory is supported; stock behavior for grouped, virtual, downloadable and external products.
+- **Before Phase 4:** whole-toman rounding rule for percentage/rate calculations; applicable Iranian tax rules and tax-inclusive/exclusive pricing.
+- **Before Phase 5:** guest checkout; Iranian billing/shipping address model.
+- **Before frontend integration:** exact frontend/API origin topology and cookie/CSRF/CORS configuration.
+- **Before Phase 7 / Notifications / Media implementation:** initial payment, shipping, email/SMS and media-storage providers.
+- **Before release:** data retention/privacy requirements and deployment-specific operational settings.
+
+Do not block Phase 1 on decisions that do not affect the foundation. Do not silently invent deferred business rules.
