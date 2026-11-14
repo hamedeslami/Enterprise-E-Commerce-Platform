@@ -14,7 +14,7 @@ The API is browser-facing and uses separate HttpOnly cookies for access and refr
 
 1. **One session per authenticated browser/device.** A successful authentication creates an `AuthSession`; another device or browser gets a different session.
 2. **One refresh-token family per session.** A session has a linear chain of refresh-token records. At most one token in that chain may be active at a time.
-3. **Short-lived access JWT.** Initial target: 5 minutes, configurable up to 10 minutes. It is not refreshed in place; refresh issues a new access JWT.
+3. **Short-lived access JWT.** Initial target and maximum: 5 minutes. Server-side configuration may lower this limit but must not raise it above 5 minutes without a separately reviewed security decision. It is not refreshed in place; refresh issues a new access JWT.
 4. **Opaque refresh credential.** Generate a 256-bit cryptographically random secret. The browser receives an opaque value containing a public token identifier and the secret; the database stores only SHA-256(secret), never the secret.
 5. **Single-use rotation.** Every successful refresh consumes the presented token and creates exactly one successor in the same database transaction.
 6. **Strict replay response.** A valid, already-consumed refresh token is evidence of replay: revoke that session and its active refresh token. A token-ID match with a secret-hash mismatch is just an invalid credential and must not revoke the session.
@@ -94,6 +94,8 @@ Required database invariants:
 - A foreign key from token to session.
 - At most one unconsumed, unrevoked refresh token per session (PostgreSQL partial unique index).
 - A consumed token has a consumption timestamp and, on successful rotation, a successor reference.
+- Every refresh token's `ExpiresAt` must be less than or equal to both its owning session's `AbsoluteExpiresAt` and current `IdleExpiresAt` at issuance. If a separate refresh-token lifetime is introduced later, the effective expiry is the earliest of that lifetime and both session boundaries.
+- On successful refresh, calculate the new idle expiry as `min(database_now + configured_idle_window, AbsoluteExpiresAt)`. The successor token expiry must not exceed the newly calculated idle expiry or the session absolute expiry.
 - Rotation/revocation transitions are conditional and atomic; application-level read-then-write checks alone are insufficient.
 
 ### StaffMfaTransaction
@@ -156,22 +158,20 @@ The API extracts the access JWT from the configured access cookie. Do not also a
 
 Refresh is a state-changing, cookie-authenticated operation. It requires CSRF validation and trusted Origin checks.
 
-Proposed server algorithm:
+Proposed server algorithm (PostgreSQL concurrency contract):
 
-1. Parse the versioned token format and validate lengths/encoding before database work.
-2. Load the token row by token ID and its owning session.
-3. Verify the presented secret against `SecretHash` using constant-time comparison. On mismatch, return a generic unauthenticated response; do not revoke the session.
-4. Begin a PostgreSQL transaction.
-5. Atomically transition the token from active to consumed using a conditional update requiring: not consumed, not revoked, not expired. Also verify the session is active and both session expiry boundaries have not passed.
-6. Only the request that changes exactly one row may create a successor token row, link `ReplacedByTokenId`, update `LastSeenAt` and `IdleExpiresAt`, and commit.
-7. Return the new access JWT and refresh credential only through Set-Cookie response headers after the transaction commits.
-8. If the conditional transition affects zero rows, distinguish internally (without revealing details to the caller):
-   - Matching secret and token already consumed: replay detected; revoke the session and all active tokens in that session atomically.
-   - Token/session expired or revoked: reject and clear stale cookies.
-   - Secret mismatch: reject without revocation.
-9. Never issue a successor if the transaction fails or rolls back.
+1. Parse the versioned token format and validate lengths/encoding before database work. Look up the token by its public token ID to obtain its immutable session ID and stored secret hash.
+2. Verify the presented secret against `SecretHash` using a constant-time comparison after strict decoding. On mismatch, return a generic unauthenticated response; do not revoke the session. Do not reveal whether the token ID exists.
+3. Begin a PostgreSQL transaction at `READ COMMITTED` isolation. All operations that mutate a session or any token in its family (refresh, replay revocation, logout, administrative revocation and expiry cleanup) must use the same lock order: **lock the AuthSession row first, then the relevant RefreshToken row(s)**. This consistent order is mandatory to reduce deadlock risk.
+4. Lock the owning AuthSession row with `SELECT ... FOR UPDATE`. Then lock the presented RefreshToken row with `SELECT ... FOR UPDATE`, re-read its state and stored hash, and verify the secret again. If the row disappeared or the hash no longer matches, reject generically without revoking anything.
+5. After acquiring both locks, obtain the current database time (for example, `clock_timestamp()`; do not rely on a transaction-start timestamp after waiting for locks). Check that the session is not revoked, the token is not revoked or consumed, and the token, idle-session and absolute-session expiry boundaries have not passed.
+6. Consume the token with a conditional `UPDATE` that repeats the active-state and expiry predicates. Exactly one affected row is required. The session row lock serializes competing refresh/revoke operations for this session; the conditional update remains a defensive invariant rather than relying only on an earlier read.
+7. In the same transaction, calculate `newIdleExpiresAt = min(database_now + configured_idle_window, session.AbsoluteExpiresAt)`; update session activity fields; insert exactly one successor whose `ExpiresAt` is no later than both the new idle expiry and the absolute expiry; and set the consumed token's `ReplacedByTokenId`. Commit all changes together.
+8. If the locked token is already consumed and the presented secret matches, treat it as replay. In that same transaction, mark the owning session revoked and revoke every still-active token in its family, then commit the revocation. Do not revoke other sessions belonging to the user.
+9. If the token or session is expired/revoked, reject and clear stale cookies. A secret mismatch is never a replay signal and must never trigger revocation.
+10. Return the new access JWT and refresh credential only through Set-Cookie response headers after the transaction commits. Never issue a successor if the transaction fails or rolls back.
 
-A concurrent second use of the same valid token is treated as replay and revokes the session. This is intentionally strict. The frontend must coordinate refresh requests (single-flight across tabs where feasible). If the server commits rotation but the response is lost, retrying the old token may force re-authentication; this reliability/security trade-off must be documented and tested rather than hidden with an unsafe grace period.
+Because both concurrent requests lock the same session row first, the second request waits. After the first commits, the second observes the consumed token and matching secret, then applies the strict replay revocation policy. The resulting behavior is deliberate: even a legitimate duplicate request or retry after a lost response can revoke that session and require re-authentication. Frontend single-flight and cross-tab coordination reduce accidental duplicates but are not security boundaries.
 
 ## 6. Session lifecycle and revocation
 
@@ -306,17 +306,19 @@ Secrets and key rings must be external to source control, access-controlled, bac
 
 ### Confirmed decisions
 
-1. **Refresh replay:** strict replay revocation is accepted. A valid consumed token presented again revokes the owning session and its active refresh token. No grace period is allowed. Frontend single-flight and cross-tab coordination are required reliability measures, but the server remains authoritative. A lost successful response can require the user to sign in again.
+1. **Refresh replay:** strict replay revocation is accepted. A valid consumed token presented again revokes the owning session and its active refresh tokens. No grace period is allowed. Frontend single-flight and cross-tab coordination are reliability measures, not a security boundary. A lost successful response can require the user to sign in again.
 2. **Account classification:** every Identity user has exactly one explicit server-controlled `AccountType`: `Customer` or `Staff`, independent of roles. Authentication endpoints enforce the matching type. Client input cannot assign or change it.
-3. **Authorization:** use server-issued JWT role claims for API authorization, with policy requirements mapped to those roles and no per-request Identity database lookup in the initial model. Role-assignment changes take effect for an existing token only when it expires; the 5-minute access-token lifetime (plus configured clock skew) bounds the normal stale-authorization window. This is an intentional trade-off, not immediate revocation.
-4. **Session duration:** customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep configurable. Access JWT target remains 5 minutes.
+3. **Authorization:** use server-issued JWT role claims for API authorization, with policy requirements mapped to those roles and no per-request Identity database lookup in the initial model. Role-assignment changes take effect for an existing JWT only when it expires; the 5-minute access-token lifetime plus configured clock skew bounds the normal stale-authorization window. This is an intentional trade-off, not immediate revocation.
+4. **Access-token lifetime:** the initial target and maximum are 5 minutes. Configuration may lower but must not raise this limit without a separately reviewed security decision.
+5. **Session duration:** customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep configurable. Absolute expiry never slides.
+6. **Browser topology and cookie baseline:** `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact-origin credentialed CORS and independent CSRF/Origin validation.
 7. **Staff MFA cookie and CSRF contract:** issue a five-minute, host-only `__Host-staff-mfa` HttpOnly/Secure/SameSite=Lax cookie containing an opaque transaction credential; it grants only completion/cancellation of that pending MFA transaction. Use ASP.NET Core antiforgery cookie + JSON request-token bootstrap (`GET /api/v1/security/csrf-token`), keep request tokens in frontend memory, send them in `X-CSRF-TOKEN`, and independently enforce exact Origin validation for every unsafe cookie-authenticated request. Refresh the antiforgery request token after authentication state changes.
-6. **Session management UX and device metadata:** customers can view their own sessions with coarse device/browser label, creation time, last successful refresh and authentication method; IP is not shown. Customers can revoke other sessions while preserving the current one, or explicitly sign out all devices. Staff session revocation by another staff member requires a dedicated security-administration permission and audit event. Metadata is informational, not an authentication factor.
+8. **Session management UX and device metadata:** customers can view their own sessions with coarse device/browser label, creation time, last successful refresh and authentication method; IP is not shown. Customers can revoke other sessions while preserving the current one, or explicitly sign out all devices. Staff session revocation by another staff member requires a dedicated security-administration permission and audit event. Metadata is informational, not an authentication factor.
+9. **JWT signing and key lifecycle:** use RSA/RS256 with a minimum 3072-bit private key, unique `kid`, active/previous public-key overlap during rotation, private-key isolation, and fail-closed production startup.
 
-5. **Browser topology and cookie baseline:** `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact-origin credentialed CORS and CSRF/Origin validation.
 
 ### Remaining decisions / implementation prerequisites
 
 1. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
 
-No authentication code should be implemented until the remaining prerequisites are reviewed and the security contracts are complete.
+Production Data Protection storage and at-rest protection must be selected, implemented and verified before production deployment or before enabling production features that depend on protected payloads. This deployment choice does **not** block provider-independent authentication implementation or local development: use isolated developer-local/test key material, keep the production configuration fail-closed, and do not ship a production fallback to ephemeral or container-local keys. All other implementation contracts in this document remain subject to review and the normal phase approval process.
