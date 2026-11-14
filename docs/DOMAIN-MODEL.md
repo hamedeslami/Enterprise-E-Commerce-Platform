@@ -56,7 +56,7 @@ Review (product, author, rating, body, moderation and verified-purchase evidence
 
 ## State machines to define before implementation
 
-- Reservation: Active, Consumed, Released, Expired. Reservation TTL remains an owner decision to be finalized before inventory implementation.
+- Reservation: Active, Consumed, Released, Expired. Reservation TTL defaults to 15 minutes and is configurable at store level. Persist an absolute expiry timestamp on each reservation; changing the store setting affects new reservations, not already-created ones.
 - Checkout: Created, Validating, AwaitingPayment, Completed, Failed, Expired.
 - Order: PendingPayment, Processing, OnHold, Completed, Cancelled, Refunded, Failed. Partial refund is an amount/record, not necessarily an order status.
 - Payment: Created, RequiresAction, Authorized, Captured, Failed, Cancelled, PartiallyRefunded, Refunded.
