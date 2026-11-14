@@ -50,7 +50,7 @@ Each module begins as one .NET project with internal Domain, Application, Infras
 |---|---|
 | Identity | Accounts, credentials, roles, permissions, sessions and refresh-token families |
 | Catalog | Products, variants, categories, tags, brands, attributes and visibility |
-| Inventory | Stock, reservations, movements, backorders and concurrency |
+| Inventory | Stock, reservations, movements, configurable backorder policies and concurrency-safe allocation |
 | Pricing | Regular/sale/scheduled prices and price resolution |
 | Customers | Customer profiles, addresses, notes and groups |
 | Cart | Guest/authenticated carts, items, expiry and merge |
@@ -67,7 +67,7 @@ Each module begins as one .NET project with internal Domain, Application, Infras
 | Notifications | Templates, delivery requests and provider adapters |
 | Reporting | Read-oriented reporting queries and projections |
 
-Checkout coordinates; it does not own product, stock, price, payment or order state. Reporting uses explicit query contracts/read models, not direct access to another module's tables.
+Checkout coordinates; it does not own product, stock, price, payment or order state. Inventory is authoritative for stock allocation: simultaneous checkout attempts must not reserve/sell the same final unit when backorders are disabled. Backorder policy is configurable per product/variant, defaults to disabled, and supports `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`; a variant-level setting overrides the product-level setting. Stock tracking itself can be disabled for products/variants where physical stock is not applicable. Reporting uses explicit query contracts/read models, not direct access to another module's tables.
 
 ## Dependency rules
 
