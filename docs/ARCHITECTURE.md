@@ -4,7 +4,7 @@
 
 ## Goals and scope
 
-An independent, API-first e-commerce backend inspired by WooCommerce, not a WordPress plugin. Initial scope is **Single-Vendor**: one store owns catalog, stock, pricing, orders and payment configuration. Staff operate the store through admin APIs; customers use storefront/account APIs.
+An independent, API-first e-commerce backend inspired by WooCommerce, not a WordPress plugin. Initial scope is **Single-Vendor**: one store owns catalog, stock, pricing, orders and payment configuration. Staff operate the store through admin APIs; customers use storefront/account APIs. The initial target market is **Iran**, and store prices/commerce amounts are expressed in **toman**.
 
 Explicitly out of scope initially: multi-vendor tenancy, seller onboarding/commissions/settlement, microservices, full WordPress CMS recreation, event streaming infrastructure and speculative distributed systems.
 
@@ -83,7 +83,7 @@ Checkout coordinates; it does not own product, stock, price, payment or order st
 
 Endpoints remain thin: authenticate/authorize, bind and validate DTOs, invoke a use case, map result to HTTP. No business logic or direct EF queries in controllers/endpoints. Never expose EF entities as API contracts. Use FluentValidation at boundaries and enforce domain invariants again in application/domain operations and database constraints.
 
-Each module owns its DbContext, schema, EF configurations and migrations. PostgreSQL is authoritative. Apply migrations in a controlled deployment step, not concurrently on every app startup. Use explicit transactions, constraints and concurrency control. Money uses decimal/numeric with documented precision; instants are UTC.
+Each module owns its DbContext, schema, EF configurations and migrations. PostgreSQL is authoritative. Apply migrations in a controlled deployment step, not concurrently on every app startup. Use explicit transactions, constraints and concurrency control. Money uses decimal/numeric with documented precision and is denominated in toman for the initial Iranian store; instants are UTC. Payment-provider-specific rial/toman units must be converted only at the provider adapter boundary, never implicitly across the domain.
 
 Cross-module checkout is not a distributed transaction. Use orchestration, stock reservations, idempotency and compensating actions.
 
@@ -113,4 +113,4 @@ Testability: unit, PostgreSQL integration, API/security and architecture depende
 
 ## Product decisions still open
 
-Target market/country and tax rules; initial currency and rounding policy; guest checkout; payment/shipping/email providers; frontend/API deployment topology and origins; media storage; downloadable product delivery. Keep these behind configuration/provider boundaries, but do not invent their behavior.
+Tax rules and legal requirements for Iran; toman amount precision and rounding policy; guest checkout; payment/shipping/email providers; frontend/API deployment topology and origins; media storage; downloadable product delivery. Keep provider-specific behavior behind configuration/provider boundaries, but do not invent it.
