@@ -7,7 +7,7 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((_, loggerConfiguration) =>
+builder.Services.AddSerilog((_, loggerConfiguration) =>
     loggerConfiguration
         .MinimumLevel.Information()
         .Enrich.FromLogContext()
