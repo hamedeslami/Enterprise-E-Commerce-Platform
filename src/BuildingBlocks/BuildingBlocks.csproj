@@ -3,4 +3,7 @@
     <RootNamespace>Ecommerce.BuildingBlocks</RootNamespace>
     <AssemblyName>Ecommerce.BuildingBlocks</AssemblyName>
   </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 </Project>
