@@ -1,13 +1,13 @@
 # Delivery Roadmap
 
-**Status:** Proposed, Phase 0. Complete and verify each phase, report actual results, then wait for explicit user approval before moving on.
+**Status:** Phase 0 approved by the owner on 2026-11-14; Phase 1 is in progress. Complete and verify each phase, report actual results, then wait for explicit user approval before moving on.
 
 ## Phase 0 — Architecture and technical design
 Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SECURITY.md and ROADMAP.md. Confirm scope, module boundaries, data ownership, invariants, security and test strategy. Confirmed foundation decisions: UUIDv7 identifiers; Persian (`fa-IR`) store locale; `Asia/Tehran` store timezone with UTC persistence; PostgreSQL `ReservedQuantity` counter maintained atomically with reservation records. No production application code.
 **Exit:** user approves design and resolves decisions blocking foundation/schema.
 
 ## Phase 1 — Project foundation
-Solution/module skeleton; dependency registration; configuration/options validation; PostgreSQL/EF Core; migration orchestration; structured logging; exception handling/Problem Details; OpenAPI; health checks; Docker Compose; unit/integration/architecture test infrastructure and CI build.
+**Status:** In progress. Solution/module skeleton; dependency registration; configuration/options validation; PostgreSQL/EF Core; migration orchestration; structured logging; exception handling/Problem Details; OpenAPI; health checks; Docker Compose; unit/integration/architecture test infrastructure and CI build.
 **Exit:** clean build; API starts locally and in Compose; DB connectivity/health checks pass; migrations apply; tests pass.
 
 ## Phase 2 — Identity and security

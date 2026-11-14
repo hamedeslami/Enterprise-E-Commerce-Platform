@@ -1,14 +1,15 @@
 # Project Progress
 
-**Current phase:** Phase 0 — Architecture and Technical Design  
-**Status:** Draft documents committed; awaiting owner review and approval.  
-**Implementation status:** No application code, migrations or runtime infrastructure have been created.
+**Current phase:** Phase 1 — Project Foundation  
+**Status:** In progress. Phase 0 has been explicitly approved by the owner.  
+**Implementation status:** Initial solution, API host, shared configuration, tests, Docker and CI foundation are being added. Database provider integration and Phase 1 verification remain outstanding.
 
 ## Repository
 
 - Repository: https://github.com/hamedeslami/Enterprise-E-Commerce-Platform
-- Working branch: docs/inventory-backorder-policy
-- Base branch: main
+- Working branch: phase-1/project-foundation
+- Phase 0 source branch: docs/inventory-backorder-policy
+- Base: approved Phase 0 branch
 
 ## Decisions confirmed
 
@@ -26,26 +27,32 @@
 - Reservation TTL: 15-minute default, configurable for new reservations at store level; each reservation stores its absolute expiry.
 - Backorders: configurable per product/variant, disabled by default (`NoBackorders`); supported modes are `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`; variant setting overrides product setting.
 
-## Phase 0 documents
+## Phase 1 scope
 
-- [Architecture](ARCHITECTURE.md)
-- [Domain Model](DOMAIN-MODEL.md)
-- [Database Design](DATABASE-DESIGN.md)
-- [API Design](API-DESIGN.md)
-- [Security](SECURITY.md)
-- [Roadmap](ROADMAP.md)
+- Solution and project structure.
+- Centralized build and package configuration.
+- API host, global Problem Details handling, OpenAPI and liveness health check.
+- Store locale/time-zone options validation.
+- PostgreSQL/EF Core provider integration and migration strategy.
+- Structured logging.
+- Docker Compose local environment.
+- Unit, integration and architecture test foundations.
+- CI build/test workflow.
 
-## Pending owner decisions
+## Current blockers / verification
+
+- EF Core 11.0.0 is stable, but as of 2026-11-14 the Npgsql EF Core 11 provider is still published as release candidate 11.0.0-rc.3; the stable Npgsql EF Core 10 provider targets EF Core 10. Do not silently mix major versions or introduce a prerelease dependency. Owner decision is required before wiring PostgreSQL migrations.
+- This environment has no .NET SDK or Docker CLI, so local build/test/Compose execution cannot be claimed. CI is being added to provide a reproducible verification path.
+
+## Deferred decisions
 
 - Rounding policy for percentage/rate calculations that produce fractional toman results.
 - Applicable Iranian tax rules and tax-inclusive/exclusive pricing policy.
-- Guest checkout requirement.
-- Frontend/API origin topology (same-site or cross-site).
+- Guest checkout requirement and Iranian address model.
+- Frontend/API origin topology.
 - Initial payment, shipping, email/SMS and media storage providers.
-- SKU uniqueness scope and whether fractional inventory is required.
-
-The whole-toman amount representation is confirmed; the precise rounding rule for percentage/rate calculations must be finalized before pricing/tax implementation. SKU scope, fractional inventory, guest checkout, Iranian address details, provider choices and deployment origins remain deferred to the phases where they become necessary. No assumptions should silently become implemented business rules.
+- SKU uniqueness scope, fractional inventory and stock behavior for special product types.
 
 ## Next step
 
-Review the Phase 0 design documents on this branch, record any final requested changes and explicitly approve the architecture. Phase 1 must not begin until that approval is given.
+Resolve the EF Core 11 / Npgsql stable-provider compatibility choice, complete database integration and Phase 1 implementation, run CI/build/tests, then report exact results and wait for explicit approval before Phase 2.
