@@ -3,6 +3,7 @@ using Ecommerce.BuildingBlocks.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Xunit;
 
 namespace Ecommerce.UnitTests;
 
