@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy have been approved to proceed; implementation is underway on `phase-2/identity-security`.
+**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy are approved. Identity persistence foundation is in progress on `phase-2/identity-security`; the initial EF migration and its PostgreSQL verification are still pending.
 
 ## Repository
 
@@ -39,6 +39,16 @@
 - Unit/integration tests and CI.
 - Compose smoke test for API liveness, PostgreSQL readiness and Development OpenAPI.
 - PR #5 merged into `main`; CI run #54 passed both `build-and-test` and `compose-smoke-test`.
+
+## Phase 2 implementation progress
+
+- Added the `Ecommerce.Modules.Identity` project and registered it in the API host.
+- Added a module-owned `IdentityDbContext` mapped to PostgreSQL schema `identity`.
+- Added ASP.NET Core Identity user/role types with UUIDv7 constructors and persistence-time UUIDv7 validation.
+- Added the EF design-time factory and pinned `dotnet-ef` tool manifest.
+- Added unit tests for UUIDv7 generation/enforcement and an integration test for module registration/schema mapping.
+- Updated Docker restore inputs and enabled CI push triggers for all `phase-*/**` branches.
+- **Not yet complete:** generate and commit the initial EF migration, then verify the migration against PostgreSQL in CI. No authentication endpoints have been implemented yet.
 
 ## Phase 2 scope
 
