@@ -4,9 +4,9 @@
 
 ## Implemented foundation
 
-- .NET 11 SDK pin and shared build properties.
-- Central Package Management for stable packages used by the API and tests.
-- ASP.NET Core API host.
+- .NET 10 SDK pin (10.0.404) and shared build properties targeting `net10.0` / C# 14.
+- Central Package Management for stable packages used by the API and tests, including EF Core 10.0.15 and Npgsql EF Core provider 10.0.3.
+- ASP.NET Core 10 API host.
 - Global Problem Details registration with trace identifier.
 - Built-in OpenAPI document endpoint.
 - Liveness health check.
@@ -19,28 +19,30 @@
 
 ## Deliberately not implemented yet
 
-- EF Core DbContext/provider/migrations.
+- EF Core DbContext/provider wiring and migrations.
 - Module business logic, authentication, catalog, inventory, checkout or payments.
 - Redis, message broker, distributed job framework or generic repository layer.
 
-## PostgreSQL provider compatibility decision
+## Version alignment
 
-As of 2026-11-14, EF Core 11.0.0 is stable. The Npgsql EF Core 11 provider is still at `11.0.0-rc.3`; the latest stable provider line is 10.0.3 and belongs to the EF Core 10 major line.
+The owner approved moving from .NET 11 to .NET 10 LTS on 2026-11-14. The selected stable baseline is:
 
-Do not reference Npgsql EF Core 10 from EF Core 11, and do not silently introduce a release-candidate dependency into a project whose dependency policy is stable-only.
+| Component | Version |
+|---|---:|
+| .NET SDK | 10.0.404 |
+| .NET / ASP.NET Core | 10.0.15 runtime line |
+| C# | 14 |
+| EF Core | 10.0.15 |
+| Npgsql EF Core provider | 10.0.3 |
+| PostgreSQL | 18 |
 
-Before database wiring, choose one of these paths:
-
-1. **Stable-only:** use EF Core 10.0.15 with Npgsql EF Core 10.0.3 on the .NET 11 host, after a compatibility smoke test. This temporarily departs from the EF Core 11 target.
-2. **Stay on EF Core 11:** use Npgsql EF Core 11.0.0-rc.3 temporarily, isolated behind Infrastructure, with explicit acceptance of prerelease risk and a tracked upgrade to stable when released.
-
-No EF migrations should be generated until this decision is made.
+The Npgsql EF Core provider 10.0.3 declares dependencies on EF Core and EF Core Relational >= 10.0.4 and < 11.0.0, so it is aligned with EF Core 10.0.15. No prerelease package is required.
 
 ## Verification still required
 
-- Restore, Release build and unit/integration tests on .NET SDK 11.0.100.
+- Restore, Release build and unit/integration tests on .NET SDK 10.0.404.
 - Docker Compose startup and PostgreSQL health check.
 - API liveness and OpenAPI smoke tests.
-- PostgreSQL connection and migration smoke test after the provider decision.
+- PostgreSQL connection and migration smoke test after persistence wiring.
 
-The current execution environment does not have the .NET SDK or Docker CLI installed. The GitHub Actions workflow is the intended remote build/test verifier; until a successful run is observed, the solution is not considered build-verified.
+The current execution environment does not have the .NET SDK or Docker CLI installed. The GitHub Actions workflow is the remote build/test verifier; until a successful run is observed, the solution is not considered build-verified.
