@@ -21,9 +21,9 @@ Phase 0 architecture and technical design were explicitly approved on 2026-11-14
 ## Target stack
 
 - .NET 10 LTS / ASP.NET Core 10 / C# 14
-- Entity Framework Core 10
+- Entity Framework Core 10 (module-owned contexts)
 - Npgsql EF Core provider 10.0.3
-- PostgreSQL
+- PostgreSQL 18
 - Redis only when justified by a measured need
 - Docker Compose
 - xUnit
@@ -48,9 +48,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The API listens on `http://localhost:8080`; liveness is available at `/health/live` and the OpenAPI document at `/openapi/v1.json`.
+The API listens on `http://localhost:8080`. Liveness is available at `/health/live`; readiness at `/health/ready` verifies a real PostgreSQL connection and executes `SELECT 1`. The OpenAPI document is available at `/openapi/v1.json` in Development.
 
-To build and test without Docker:
+To run tests locally, start the PostgreSQL service first (for example, `docker compose up -d postgres`), then run:
 
 ```bash
 dotnet restore Ecommerce.sln
@@ -58,4 +58,4 @@ dotnet build Ecommerce.sln --no-restore
 dotnet test Ecommerce.sln --no-build
 ```
 
-The EF Core 10 and Npgsql 10 provider versions are pinned centrally. Module-owned DbContexts, migrations and PostgreSQL connectivity verification remain part of Phase 1 implementation.
+The EF Core 10 and Npgsql 10 provider versions are pinned centrally. Each business module will own its DbContext and migrations. The API host intentionally does not contain a shared commerce DbContext; the first real context and migration will be introduced with the module that owns its tables.
