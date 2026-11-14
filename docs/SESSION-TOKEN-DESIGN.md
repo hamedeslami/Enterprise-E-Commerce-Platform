@@ -258,7 +258,17 @@ Keep distinct key material and purposes:
 - Data Protection key ring for Identity providers and protected application payloads.
 - Refresh tokens and MFA transaction secrets generated with a cryptographic RNG; only their hashes persist.
 
-Secrets and key rings must be external to source control, access-controlled, backed up and rotated with a documented recovery plan. Production Data Protection keys must be persistent and shared by API instances that need to unprotect the same payloads. Key storage/encryption provider is still a deployment decision.
+Secrets and key rings must be external to source control, access-controlled, backed up and rotated with a documented recovery plan. Production Data Protection keys must be persistent and shared by API instances that need to unprotect the same payloads. The exact provider remains a tracked decision under TD-SEC-001 in docs/TECHNICAL-DEBT.md; it is a production blocker, not an untracked future task.
+
+### Data Protection deployment policy (approved)
+
+- Production Data Protection must use a persistent key ring shared by every API instance that needs to protect/unprotect the same payloads.
+- Set one explicit, stable ApplicationName for this application across those instances. Keep Development, Staging and Production key rings isolated.
+- Protect key-ring material at rest with an independently managed certificate or KMS-backed mechanism; restrict read/write access to the API workload and authorized operators.
+- Define protected backup, restore, rotation and compromise-recovery procedures. Losing the key ring can make previously protected payloads unrecoverable; backup restoration must be rehearsed.
+- Production must fail closed if persistent shared storage or at-rest protection is missing or invalid. Do not silently fall back to ephemeral or local-container storage.
+- Local development may use a developer-local key ring or a Docker volume, isolated from every shared environment.
+- The exact storage and encryption provider is intentionally not selected until the hosting platform is selected. This is tracked as TD-SEC-001 in docs/TECHNICAL-DEBT.md, with a mandatory closure gate before production deployment or enabling protected production data.
 
 ## 9. Required tests before approval
 
