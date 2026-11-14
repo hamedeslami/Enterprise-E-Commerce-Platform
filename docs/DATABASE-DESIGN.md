@@ -36,7 +36,7 @@ Do not index every column speculatively. Validate query plans using representati
 
 ## Types and time
 
-For the initial Iranian store, canonical product, cart, order and refund amounts are denominated in toman. Store monetary values using PostgreSQL numeric mapped to .NET decimal, with an explicitly selected precision/scale after confirming whether fractional toman amounts are allowed. Do not use float/double. Toman is a business unit, not an ISO 4217 currency code; do not label it with an ISO code. If a payment provider expects rial or another unit, convert explicitly at the provider adapter boundary and test the factor/direction to prevent 10x errors. Define rounding rules for each calculation. Store instants as timestamptz in UTC; use a configured IANA timezone only for store-local schedules and presentation. Define quantity precision according to supported goods. JSONB is acceptable for bounded provider metadata or validated non-core extension data, not as a substitute for relational commerce modeling.
+For the initial Iranian store, canonical product, cart, order, payment and refund amounts are whole integers denominated in toman. Store them as PostgreSQL `BIGINT` mapped to .NET `long`; expose them as JSON integers. Do not use float/double or decimal columns for posted monetary amounts. Percentage/rate calculations may use a higher-precision intermediate, but the resulting amount must be rounded to a whole toman before persistence or API output, using one explicit and tested rounding policy. Toman is a business unit, not an ISO 4217 currency code; do not label it with an ISO code. If a payment provider expects rial or another unit, convert explicitly at the provider adapter boundary and test the factor/direction to prevent 10x errors. Define rounding rules for each calculation. Store instants as timestamptz in UTC; use a configured IANA timezone only for store-local schedules and presentation. Define quantity precision according to supported goods. JSONB is acceptable for bounded provider metadata or validated non-core extension data, not as a substitute for relational commerce modeling.
 
 Soft delete only when restoration/audit requirements justify it. Orders, payments, stock movements and audit history must not be silently hard-deleted.
 
@@ -46,4 +46,4 @@ Each module owns migrations. Migration generation/application are reviewed artif
 
 ## Decisions pending
 
-Identifier format, toman precision/scale and rounding, SKU scope, fractional inventory, store timezone, Iranian address model, data retention/privacy and read-replica requirements.
+Identifier format, percentage-calculation rounding policy, SKU scope, fractional inventory, store timezone, Iranian address model, data retention/privacy and read-replica requirements.
