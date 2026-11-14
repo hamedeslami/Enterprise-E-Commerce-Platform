@@ -15,6 +15,7 @@
 - Validated store locale and timezone options; defaults are `fa-IR` and `Asia/Tehran`.
 - Unit and API integration test projects.
 - Dockerfile, PostgreSQL Compose service, local environment template and CI workflow.
+- Module assembly policy: create each module project when its implementation phase starts instead of committing 18 empty placeholder assemblies; see [module boundaries](../src/Modules/README.md).
 
 ## Deliberately not implemented yet
 
@@ -41,3 +42,5 @@ No EF migrations should be generated until this decision is made.
 - Docker Compose startup and PostgreSQL health check.
 - API liveness and OpenAPI smoke tests.
 - PostgreSQL connection and migration smoke test after the provider decision.
+
+The current execution environment does not have the .NET SDK or Docker CLI installed. The GitHub Actions workflow is the intended remote build/test verifier; until a successful run is observed, the solution is not considered build-verified.
