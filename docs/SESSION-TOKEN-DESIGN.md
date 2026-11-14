@@ -29,6 +29,8 @@ The API is browser-facing and uses separate HttpOnly cookies for access and refr
 
 All identifiers are application-generated UUIDv7. Exact EF property types, indexes and migrations will be specified in implementation design.
 
+`ApplicationUser` must have a required, non-nullable, server-controlled `AccountType` with exactly two initial values: `Customer` and `Staff`. Do not silently default newly provisioned users to either type; trusted provisioning flows must set it explicitly. Enforce the allowed values in the persistence model/database where practical. It is independent of `ApplicationRole` and role assignments. Account-type conversion is privileged, audited, and revokes all existing sessions.
+
 ### AuthSession
 
 One row per browser/device session.
@@ -117,7 +119,7 @@ Do not accept client-supplied roles, permissions, user IDs or assurance values. 
 
 ### Authorization model (approved: JWT claims)
 
-Authorization is based on claims minted by the API after successful authentication. The client cannot submit or override roles, permissions, account type, or authentication assurance. The initial implementation will place the server-authoritative role claims (and only the permission claims needed by the API policy model) in the access JWT. API authorization policies evaluate those claims without a per-request Identity database lookup.
+Authorization is based on claims minted by the API after successful authentication. The client cannot submit or override roles, permissions, account type, or authentication assurance. The initial implementation will place server-authoritative role claims in the access JWT. ASP.NET Core authorization policies map policy requirements to those role claims; do not duplicate an expansive permission catalog into every token. API authorization policies evaluate the signed claims without a per-request Identity database lookup. If later requirements introduce user-specific permission grants that cannot be represented by role claims, that is a separate design change.
 
 This deliberately accepts bounded authorization staleness: a role or permission change does not alter an already-issued JWT. With the approved 5-minute access-token lifetime, the normal maximum stale-claim window is the remaining lifetime of that JWT. Refresh must issue claims from current server-side account/role data, not copy claims from the previous token. Do not lengthen access-token lifetime to improve performance without revisiting this decision.
 
@@ -224,6 +226,9 @@ Secrets and key rings must be external to source control, access-controlled, bac
 - JWT validation rejects wrong issuer/audience, expiry, not-before, bad signature, disallowed algorithm and unknown key ID.
 - Session expiry and revocation rules are deterministic under an injected clock.
 - Staff password validation alone cannot create an AuthSession.
+- Provisioning cannot create an Identity user without an explicit valid AccountType; Customer and Staff authentication paths reject the opposite type.
+- Access JWT role claims are minted from current server-side role assignments, cannot be overridden by request data, and are rejected when signature/issuer/audience validation fails.
+- A role change does not mutate an already-issued JWT; a subsequent refresh uses current role assignments.
 
 ### PostgreSQL integration/concurrency tests
 - Successful refresh consumes the old token and creates exactly one successor in one transaction.
