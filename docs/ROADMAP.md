@@ -4,10 +4,10 @@
 
 ## Phase 0 — Architecture and technical design
 Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SECURITY.md and ROADMAP.md. Confirm scope, module boundaries, data ownership, invariants, security and test strategy. Confirmed foundation decisions: UUIDv7 identifiers; Persian (`fa-IR`) store locale; `Asia/Tehran` store timezone with UTC persistence; PostgreSQL `ReservedQuantity` counter maintained atomically with reservation records. No production application code.
-**Exit:** user approves design and resolves decisions blocking foundation/schema.
+**Exit:** user approves design and resolves decisions blocking foundation.
 
 ## Phase 1 — Project foundation
-**Status:** In progress. Solution/module skeleton; dependency registration; configuration/options validation; PostgreSQL/EF Core; migration orchestration; structured logging; exception handling/Problem Details; OpenAPI; health checks; Docker Compose; unit/integration/architecture test infrastructure and CI build.
+**Status:** In progress. Solution/module skeleton; dependency registration; configuration/options validation; PostgreSQL/EF Core 10 with Npgsql 10; migration orchestration; structured logging; exception handling/Problem Details; OpenAPI; health checks; Docker Compose; unit/integration/architecture test infrastructure and CI build.
 **Exit:** clean build; API starts locally and in Compose; DB connectivity/health checks pass; migrations apply; tests pass.
 
 ## Phase 2 — Identity and security
