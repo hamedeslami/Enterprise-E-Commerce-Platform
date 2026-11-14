@@ -1,0 +1,67 @@
+# Domain Model
+
+**Status:** Proposed, Phase 0. **Store model:** Single-Vendor.
+
+## Domain principles
+
+- One store is the merchant and owns catalog, inventory, pricing, orders and payment configuration.
+- Each module owns its entities and invariants.
+- IDs crossing module boundaries are references, not permission to modify another module's state.
+- API DTOs are not domain entities.
+- Orders preserve immutable purchase facts. Later catalog, price, tax or address edits must not rewrite history.
+- State changes use explicit operations, not arbitrary field updates.
+
+## Core aggregates and entities
+
+### Identity
+UserAccount (login identity, normalized identifiers, password hash, account state); Role and Permission; assignments; AuthSession (device/session metadata, expiry/revocation and token family); RefreshToken (hash only, family/session, issued/expiry/consumed/revoked state and replacement reference). Customer profile belongs to Customers, not Identity. Staff/customer are authorization capabilities over accounts, not separate authentication systems.
+
+### Catalog
+Product (name, slug, descriptions, type, publication/visibility, SKU policy, brand, taxonomy and metadata); ProductVariant (variation-specific attributes, SKU, media and purchasable configuration); ProductAttribute and AttributeValue; Category (hierarchy); Brand; Tag; product-media associations. Product types include simple, variable, grouped, virtual, downloadable and external/affiliate. Each type requires explicit purchase and stock behavior.
+
+### Inventory
+StockItem (purchasable product/variant reference, on-hand, reserved and backorder policy); StockReservation (quantity, expiry, status and checkout/order reference); StockMovement (append-only adjustment/sale/restock/reservation-release history). Available stock is derived from on-hand less active reservations, subject to backorder policy. Concurrent reservations must not oversell when backorders are disabled.
+
+### Pricing, taxes and promotions
+Price (amount, currency, regular/sale values and schedule); TaxClass, TaxRate and TaxRule; Coupon (discount type/value, validity, usage limits and customer/product/category restrictions); Promotion (automatic rule with eligibility and stacking policy). Calculations are server-owned. Currency, rounding, tax-inclusive/exclusive behavior and stacking must be configured.
+
+### Customers and cart
+CustomerProfile linked to an Identity user when registered; guest identity is not an account. CustomerAddress with billing/shipping type. Cart (user or opaque guest owner, status, currency, expiry) and CartItem (purchasable reference, quantity, selected variant/options). Cart prices are recalculable, never authoritative order prices. Login merge revalidates stock, variant, price and promotions.
+
+### Checkout and orders
+CheckoutAttempt (idempotency key, cart, validated address/shipping/payment selections, expiry and lifecycle). Order (order number, customer/guest reference, currency, totals, status and timestamps). OrderItemSnapshot (product/variant IDs plus immutable name, SKU, attributes, unit price, quantity, tax, discount and line totals). OrderAddressSnapshot (immutable billing/shipping values). OrderNote and OrderStatusHistory. Refund (amount, reason, status and payment/order references); partial refunds cannot exceed refundable captured amount.
+
+### Payments and shipping
+PaymentAttempt and PaymentTransaction (provider, amount/currency, idempotency reference, provider transaction ID, status and timestamps). WebhookInboxItem (provider event ID, signature result, processing and retry state). ShippingZone, ShippingMethod, ShippingClass. Shipment (order reference, carrier/provider, tracking number, status and event history).
+
+### Supporting modules
+Review (product, author, rating, body, moderation and verified-purchase evidence); Wishlist and WishlistItem; MediaAsset (storage key, content type, size, dimensions, checksum and processing state); ContentPage, Menu and StoreSetting; Notification and DeliveryAttempt; ReportProjection (derived read model, not source-of-truth data).
+
+## Critical invariants
+
+1. Product/variant must be purchasable and valid for requested quantity at checkout.
+2. Client cannot set authoritative price, tax, discount, stock, order owner, payment status or permissions.
+3. SKU uniqueness scope must be explicitly decided and enforced.
+4. Variable product purchase requires a valid variant.
+5. Reservation and order creation are concurrency-safe and idempotent.
+6. Every on-hand stock adjustment produces a stock movement.
+7. Order captures immutable item, address, price, discount and tax snapshots.
+8. Order transitions and refund limits are validated by server-side operations.
+9. Webhooks are signature-verified and idempotent; redirect alone never proves payment.
+10. Coupon eligibility and usage limits are checked atomically.
+11. Customer ownership comes from authenticated identity or validated guest capability, never trusted client userId.
+12. Catalog edits/deletions cannot corrupt order history.
+
+## State machines to define before implementation
+
+- Reservation: Active, Consumed, Released, Expired.
+- Checkout: Created, Validating, AwaitingPayment, Completed, Failed, Expired.
+- Order: PendingPayment, Processing, OnHold, Completed, Cancelled, Refunded, Failed. Partial refund is an amount/record, not necessarily an order status.
+- Payment: Created, RequiresAction, Authorized, Captured, Failed, Cancelled, PartiallyRefunded, Refunded.
+- Shipment: Pending, Ready, Shipped, InTransit, Delivered, Exception, Returned.
+
+Transitions require guards and history. Product publication vocabulary is to be finalized in Catalog.
+
+## Open domain decisions
+
+Confirm currency/rounding, guest checkout, downloadable product authorization/expiry, reservation TTL, backorder policy, coupon stacking, review eligibility, address localization and whether paid orders may be edited. Do not guess these rules.
