@@ -2,7 +2,7 @@
 
 **Current phase:** Phase 1 — Project Foundation  
 **Status:** In progress. Phase 0 has been explicitly approved by the owner.  
-**Implementation status:** Initial solution, API host, shared configuration, tests, Docker and CI foundation are being added. Database provider integration and Phase 1 verification remain outstanding.
+**Implementation status:** Initial solution, API host, shared configuration, tests, Docker and CI foundation are being added. PostgreSQL/EF Core integration and Phase 1 verification remain outstanding.
 
 ## Repository
 
@@ -26,6 +26,8 @@
 - Inventory reservation strategy: transactional `ReservedQuantity` counter maintained atomically with reservation records in PostgreSQL.
 - Reservation TTL: 15-minute default, configurable for new reservations at store level; each reservation stores its absolute expiry.
 - Backorders: configurable per product/variant, disabled by default (`NoBackorders`); supported modes are `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`; variant setting overrides product setting.
+- Runtime/framework baseline: .NET 10 LTS, ASP.NET Core 10 and C# 14.
+- ORM/provider baseline: EF Core 10.0.15 and Npgsql EF Core provider 10.0.3; versions are centrally pinned and stable.
 
 ## Phase 1 scope
 
@@ -41,8 +43,8 @@
 
 ## Current blockers / verification
 
-- EF Core 11.0.0 is stable, but as of 2026-11-14 the Npgsql EF Core 11 provider is still published as release candidate 11.0.0-rc.3; the stable Npgsql EF Core 10 provider targets EF Core 10. Do not silently mix major versions or introduce a prerelease dependency. Owner decision is required before wiring PostgreSQL migrations.
-- This environment has no .NET SDK or Docker CLI, so local build/test/Compose execution cannot be claimed. CI is being added to provide a reproducible verification path.
+- The .NET 10 / EF Core 10 / Npgsql 10 version alignment is selected. The provider declares compatibility with EF Core 10 (minimum 10.0.4, below 11.0.0).
+- This environment has no .NET SDK or Docker CLI, so local build/test/Compose execution cannot be claimed. CI is the reproducible verification path; its result must be observed before Phase 1 can be considered verified.
 
 ## Deferred decisions
 
@@ -55,4 +57,4 @@
 
 ## Next step
 
-Resolve the EF Core 11 / Npgsql stable-provider compatibility choice, complete database integration and Phase 1 implementation, run CI/build/tests, then report exact results and wait for explicit approval before Phase 2.
+Complete Phase 1 PostgreSQL integration using module-owned persistence, run CI/build/tests and Compose smoke tests, report exact results, then wait for explicit approval before Phase 2.
