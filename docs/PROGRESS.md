@@ -19,7 +19,7 @@
 - Modular Monolith; not microservices.
 - Authentication target: JWT access + refresh tokens in separate HttpOnly cookies with CSRF defenses.
 - Initial target country/market: Iran.
-- Store price and commerce amount unit: toman.
+- Store price and commerce amount unit: whole-integer toman amounts (`long` / PostgreSQL `BIGINT` / JSON integer).
 
 ## Phase 0 documents
 
@@ -32,7 +32,7 @@
 
 ## Pending owner decisions
 
-- Toman precision/scale and monetary rounding policy (including whether fractional toman values are allowed).
+- Rounding policy for percentage/rate calculations that produce fractional toman results.
 - Applicable Iranian tax rules and tax-inclusive/exclusive pricing policy.
 - Guest checkout requirement.
 - Store timezone.
@@ -42,7 +42,7 @@
 - Stock reservation TTL and backorder policy.
 - Identifier strategy (UUID/ULID or bigint).
 
-These decisions can be finalized in the relevant phase if they do not block foundation design. No assumptions should silently become implemented business rules.
+The whole-toman amount representation is confirmed; the precise rounding rule for percentage/rate calculations must be finalized before pricing/tax implementation. These decisions can be finalized in the relevant phase if they do not block foundation design. No assumptions should silently become implemented business rules.
 
 ## Next step
 
