@@ -50,12 +50,19 @@ docker compose up --build
 
 The API listens on `http://localhost:8080`. Liveness is available at `/health/live`; readiness at `/health/ready` verifies a real PostgreSQL connection and executes `SELECT 1`. The OpenAPI document is available at `/openapi/v1.json` in Development.
 
-To run tests locally, start the PostgreSQL service first (for example, `docker compose up -d postgres`), then run:
+To run tests locally, start PostgreSQL first. The integration-test default connection string matches the checked-in `.env.example`; if you change its password, set `TEST_POSTGRES_CONNECTION_STRING` to the matching test database connection string before running tests. For example, on PowerShell:
+
+```powershell
+$env:TEST_POSTGRES_CONNECTION_STRING = "Host=127.0.0.1;Port=5432;Database=ecommerce;Username=ecommerce;Password=YOUR_LOCAL_PASSWORD"
+dotnet test Ecommerce.sln
+```
+
+Build and test commands:
 
 ```bash
 dotnet restore Ecommerce.sln
-dotnet build Ecommerce.sln --no-restore
-dotnet test Ecommerce.sln --no-build
+dotnet build Ecommerce.sln --configuration Release --no-restore
+dotnet test Ecommerce.sln --configuration Release --no-build
 ```
 
 The EF Core 10 and Npgsql 10 provider versions are pinned centrally. Each business module will own its DbContext and migrations. The API host intentionally does not contain a shared commerce DbContext; the first real context and migration will be introduced with the module that owns its tables.
