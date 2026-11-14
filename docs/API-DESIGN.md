@@ -26,7 +26,7 @@ These are illustrative contracts, not a promise every endpoint ships in the firs
 - RFC 9457 Problem Details with stable application error codes and safe details.
 - Never expose stack traces, SQL, provider secrets or sensitive data.
 - UTC ISO-8601 timestamps.
-- Money includes amount and currency; formatted display strings are not canonical values.
+- Document enum and compatibility behavior.
 - Document enum and compatibility behavior.
 
 ## Pagination, filtering and sorting
@@ -55,4 +55,4 @@ Generate OpenAPI from actual contracts. Document cookie behavior, CSRF header, c
 
 ## Decisions pending
 
-Storefront locale, currency representation, guest cart capability, address fields for target market, frontend/API origin topology and pagination-total requirements.
+Storefront locale (Persian/Farsi is expected but not yet confirmed), explicit API representation/identifier for toman, guest cart capability, Iranian address fields, frontend/API origin topology and pagination-total requirements.
