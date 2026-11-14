@@ -31,7 +31,7 @@ Do not index every column speculatively. Validate query plans using representati
 - Every externally retried operation needs an idempotency boundary.
 - Stock reservation uses atomic SQL predicates, row locking or equivalent concurrency-safe logic, tested with concurrent PostgreSQL requests, including two or more buyers racing for the final unit.
 - When backorders are disabled, the database operation must reject allocation that would make available stock negative. When enabled, oversell is an explicit policy outcome and must remain observable in stock/order state.
-- Reservation expiry/release and reservation consumption must be idempotent; a retry must not release or consume the same reservation twice.
+- Reservation expiry/release and reservation consumption must be idempotent; a retry must not release or consume the same reservation twice. Default reservation TTL is 15 minutes and is configurable at store level; persist the expiry instant per reservation so later setting changes do not silently rewrite existing reservations.
 - Coupon usage counters/records update atomically.
 - Webhook inbox uniqueness prevents duplicate application.
 - Use transactional outbox only when a committed business change must reliably publish an event.
