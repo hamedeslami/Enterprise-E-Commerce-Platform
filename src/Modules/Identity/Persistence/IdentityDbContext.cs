@@ -55,6 +55,17 @@ public sealed class IdentityDbContext(
         }
     }
 
-    private static bool IsUuidV7(Guid value) =>
-        value != Guid.Empty && value.ToString("N")[12] == '7';
+    private static bool IsUuidV7(Guid value)
+    {
+        if (value == Guid.Empty)
+        {
+            return false;
+        }
+
+        var formatted = value.ToString("N");
+        var hasVersionSeven = formatted[12] == '7';
+        var hasRfc4122Variant = formatted[16] is '8' or '9' or 'a' or 'b';
+
+        return hasVersionSeven && hasRfc4122Variant;
+    }
 }
