@@ -1,0 +1,60 @@
+name: Generate Identity Migration
+
+on:
+  push:
+    branches:
+      - "phase-2/identity-security"
+    paths:
+      - ".github/workflows/generate-identity-migration.yml"
+      - "src/Modules/Identity/**"
+      - "src/Ecommerce.Api/**"
+      - "Directory.Packages.props"
+      - "Ecommerce.sln"
+      - ".config/dotnet-tools.json"
+
+permissions:
+  contents: read
+
+jobs:
+  generate-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.404
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Restore solution
+        run: dotnet restore Ecommerce.sln
+
+      - name: Generate Identity migration
+        run: |
+          dotnet ef migrations add InitialIdentitySchema \
+            --project src/Modules/Identity/Identity.csproj \
+            --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \
+            --context IdentityDbContext \
+            --output-dir Persistence/Migrations
+
+      - name: Generate migration SQL for review
+        run: |
+          dotnet ef migrations script \
+            --project src/Modules/Identity/Identity.csproj \
+            --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \
+            --context IdentityDbContext \
+            --output migration.sql
+
+      - name: Upload generated migration
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-initial-migration
+          path: |
+            src/Modules/Identity/Persistence/Migrations/
+            migration.sql
+          if-no-files-found: error
+          retention-days: 7
