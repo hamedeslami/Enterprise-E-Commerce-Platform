@@ -32,7 +32,7 @@ if (string.IsNullOrWhiteSpace(postgresConnectionString))
         "The PostgreSQL connection string is missing. Configure ConnectionStrings:Postgres.");
 }
 
-builder.Services.AddSingleton(NpgsqlDataSource.Create(postgresConnectionString));
+builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(postgresConnectionString));
 
 builder.Services
     .AddHealthChecks()
