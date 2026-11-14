@@ -1,8 +1,10 @@
 using Ecommerce.Api;
+using Ecommerce.Api.Health;
 using Ecommerce.BuildingBlocks;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Npgsql;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,9 +24,23 @@ builder.Services.AddProblemDetails(options =>
 });
 
 builder.Services.AddOpenApi();
+
+var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres");
+if (string.IsNullOrWhiteSpace(postgresConnectionString))
+{
+    throw new InvalidOperationException(
+        "The PostgreSQL connection string is missing. Configure ConnectionStrings:Postgres.");
+}
+
+builder.Services.AddSingleton(NpgsqlDataSource.Create(postgresConnectionString));
+
 builder.Services
     .AddHealthChecks()
-    .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
+    .AddCheck(
+        "self",
+        () => HealthCheckResult.Healthy(),
+        tags: ["live"])
+    .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"]);
 
 builder.Services.AddBuildingBlocks(builder.Configuration);
 builder.Services.AddValidatorsFromAssemblyContaining<ApiAssemblyMarker>();
@@ -36,9 +52,15 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("live")
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
 });
 
 app.Run();
