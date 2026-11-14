@@ -1,0 +1,22 @@
+using Microsoft.AspNetCore.Mvc.Testing;
+
+namespace Ecommerce.IntegrationTests;
+
+public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+{
+    private readonly HttpClient _client;
+
+    public HealthEndpointTests(WebApplicationFactory<Program> factory)
+    {
+        _client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task LivenessEndpoint_ReturnsHealthy()
+    {
+        using var response = await _client.GetAsync("/health/live");
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+}
