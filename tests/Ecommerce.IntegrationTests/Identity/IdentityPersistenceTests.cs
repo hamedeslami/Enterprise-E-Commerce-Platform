@@ -8,6 +8,8 @@ namespace Ecommerce.IntegrationTests.Identity;
 
 public sealed class IdentityPersistenceTests : IClassFixture<ApiFactory>
 {
+    private const string InitialMigrationId = "20261114104352_InitialIdentitySchema";
+
     private readonly ApiFactory _factory;
 
     public IdentityPersistenceTests(ApiFactory factory)
@@ -29,5 +31,23 @@ public sealed class IdentityPersistenceTests : IClassFixture<ApiFactory>
 
         Assert.NotNull(userId);
         Assert.Equal(ValueGenerated.Never, userId!.ValueGenerated);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_CreatesIdentitySchemaAndTables()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+
+        await dbContext.Database.MigrateAsync();
+
+        var appliedMigrations = await dbContext.Database.GetAppliedMigrationsAsync();
+        Assert.Contains(InitialMigrationId, appliedMigrations);
+
+        var usersTableExists = await dbContext.Database
+            .SqlQuery<bool>($"SELECT to_regclass('identity.\"AspNetUsers\"') IS NOT NULL AS \"Value\"")
+            .SingleAsync();
+
+        Assert.True(usersTableExists);
     }
 }
