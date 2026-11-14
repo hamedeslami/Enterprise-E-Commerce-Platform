@@ -228,6 +228,27 @@ Required properties:
 
 A `__Host-` cookie prefix is a strong option when the deployment can satisfy its requirements (Secure, Path=/, no Domain). Local HTTP development may require a separate development-only configuration; production security flags must not be weakened to accommodate local development.
 
+### MFA transaction cookie and CSRF contract (approved)
+
+#### Staff MFA transaction cookie
+
+- After valid staff password verification, issue only a short-lived pre-authentication cookie named `__Host-staff-mfa`; do not issue access or refresh cookies at this stage.
+- The cookie is host-only, `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, and has no `Domain` attribute. Its lifetime must not exceed the MFA transaction's server-side expiry (initial default: 5 minutes).
+- Its value is an opaque, versioned transaction credential containing a public transaction identifier and a cryptographically random secret. Persist only a secure hash of the secret. Validate purpose, expiry, attempt limit, cancellation and single-use state on every MFA completion attempt.
+- The cookie authorizes only completion/cancellation of that specific pending staff MFA transaction. It must never authorize normal API access, session listing, refresh or any other authenticated operation.
+- Clear it on successful MFA completion, cancellation, expiry handling and logout/error paths where the transaction is invalidated. Cookie clearing must match its original name and attributes.
+- The cookie remains host-only at `api.shop.com`; the admin frontend never reads it. The admin frontend sends credentialed requests to the API.
+
+#### CSRF bootstrap and validation
+
+- Use ASP.NET Core antiforgery's **cookie token + request token** pattern (synchronizer-style request token), not a naive client-generated double-submit value. The antiforgery cookie is issued by the API and remains HttpOnly; the request token is returned in JSON by a dedicated safe bootstrap endpoint, initially `GET /api/v1/security/csrf-token`.
+- The bootstrap response must be `Cache-Control: no-store`, must be served only to the exact configured frontend Origins, and must not create an authenticated session or grant authorization. Browser clients call it with credentials enabled and keep the returned request token in memory only.
+- Every unsafe cookie-authenticated request sends the request token in `X-CSRF-TOKEN`. The API validates the request-token/antiforgery-cookie pair and independently validates that the request Origin exactly matches the allow-list (`https://shop.com`, `https://panel.shop.com` in production). Missing Origin, untrusted Origin, missing token or invalid token is rejected; do not fall back to Referer as an authorization substitute.
+- Apply this to customer/staff password login, OTP request/verify, staff MFA completion/cancellation, refresh, logout, session listing/revocation when cookie-authenticated, and all other unsafe cookie-authenticated routes. Safe bootstrap/read-only requests do not mutate authentication state.
+- After authentication state changes (including successful login or MFA completion), the frontend obtains a fresh antiforgery request token before subsequent unsafe requests. The server must use the framework's supported antiforgery APIs and must not invent its own cryptographic token format.
+- Frontends retain request tokens in memory only; never put them in LocalStorage, SessionStorage, URLs, logs or analytics. A page reload simply obtains a fresh token.
+- CSRF validation and exact Origin validation are independent, mandatory controls. SameSite=Lax and CORS do not replace either control. CORS remains exact-origin with credentials; no wildcard or arbitrary Origin reflection.
+
 ## 8. Key and secret separation
 
 Keep distinct key material and purposes:
@@ -279,13 +300,13 @@ Secrets and key rings must be external to source control, access-controlled, bac
 2. **Account classification:** every Identity user has exactly one explicit server-controlled `AccountType`: `Customer` or `Staff`, independent of roles. Authentication endpoints enforce the matching type. Client input cannot assign or change it.
 3. **Authorization:** use server-issued JWT role claims for API authorization, with policy requirements mapped to those roles and no per-request Identity database lookup in the initial model. Role-assignment changes take effect for an existing token only when it expires; the 5-minute access-token lifetime (plus configured clock skew) bounds the normal stale-authorization window. This is an intentional trade-off, not immediate revocation.
 4. **Session duration:** customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep configurable. Access JWT target remains 5 minutes.
+7. **Staff MFA cookie and CSRF contract:** issue a five-minute, host-only `__Host-staff-mfa` HttpOnly/Secure/SameSite=Lax cookie containing an opaque transaction credential; it grants only completion/cancellation of that pending MFA transaction. Use ASP.NET Core antiforgery cookie + JSON request-token bootstrap (`GET /api/v1/security/csrf-token`), keep request tokens in frontend memory, send them in `X-CSRF-TOKEN`, and independently enforce exact Origin validation for every unsafe cookie-authenticated request. Refresh the antiforgery request token after authentication state changes.
 6. **Session management UX and device metadata:** customers can view their own sessions with coarse device/browser label, creation time, last successful refresh and authentication method; IP is not shown. Customers can revoke other sessions while preserving the current one, or explicitly sign out all devices. Staff session revocation by another staff member requires a dedicated security-administration permission and audit event. Metadata is informational, not an authentication factor.
 
 5. **Browser topology and cookie baseline:** `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact-origin credentialed CORS and CSRF/Origin validation.
 
 ### Remaining decisions / implementation prerequisites
 
-1. **MFA transaction cookie and antiforgery bootstrap contract:** finalize transaction-cookie scope and CSRF token delivery/validation before implementing endpoints.
-2. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
+1. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
 
 No authentication code should be implemented until the remaining prerequisites are reviewed and the security contracts are complete.
