@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy are approved. Identity persistence foundation is in progress on `phase-2/identity-security`; the initial EF migration and its PostgreSQL verification are still pending.
+**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy are approved. Identity persistence foundation and its generated initial EF migration are committed on `phase-2/identity-security`; PostgreSQL migration verification is running through CI.
 
 ## Repository
 
@@ -48,7 +48,10 @@
 - Added the EF design-time factory and pinned `dotnet-ef` tool manifest.
 - Added unit tests for UUIDv7 generation/enforcement and an integration test for module registration/schema mapping.
 - Updated Docker restore inputs and enabled CI push triggers for all `phase-*/**` branches.
-- **Not yet complete:** generate and commit the initial EF migration, then verify the migration against PostgreSQL in CI. No authentication endpoints have been implemented yet.
+- Generated the initial EF migration, Designer and ModelSnapshot using GitHub Actions (no local .NET installation required) and committed them to the Phase 2 branch.
+- Added an integration test that applies the migration to the CI PostgreSQL database and verifies the migration history and users table.
+- Added Data Protection registration; production still requires a persistent, protected shared key ring.
+- **Not yet complete:** wait for PostgreSQL migration integration tests and the complete CI run to pass. No authentication endpoints have been implemented yet.
 
 ## Phase 2 scope
 
