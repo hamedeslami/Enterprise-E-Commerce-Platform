@@ -66,4 +66,4 @@ Transitions require guards and history. Product publication vocabulary is to be 
 
 ## Open domain decisions
 
-Confirm the rounding policy for percentage/rate calculations, applicable Iranian tax rules and tax-inclusive/exclusive pricing, guest checkout, downloadable product authorization/expiry, reservation TTL, backorder policy, coupon stacking, review eligibility, address localization and whether paid orders may be edited. Do not guess these rules.
+Confirm the rounding policy for percentage/rate calculations, applicable Iranian tax rules and tax-inclusive/exclusive pricing, guest checkout, downloadable product authorization/expiry, coupon stacking, review eligibility, address localization and whether paid orders may be edited. Reservation TTL and backorder policy are confirmed as specified above. Do not guess the remaining rules.
