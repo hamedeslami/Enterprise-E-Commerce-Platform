@@ -19,8 +19,8 @@ Product types, variants, attributes, categories, brands, media metadata, invento
 **Exit:** catalog/stock rules, migrations, API, authorization and concurrent stock tests pass.
 
 ## Phase 4 — Pricing, taxes and promotions
-Price resolution, scheduled sale prices, market-specific tax configuration/calculation, coupons, restrictions, redemption limits and automatic promotions.
-**Exit:** deterministic currency/rounding/tax/stacking and concurrent coupon tests pass.
+Price resolution, scheduled sale prices, market-specific tax configuration/calculation, coupons, restrictions, redemption limits and automatic promotions. Persisted and API-facing monetary amounts are whole toman integers; finalize and test the rounding rule for percentage/rate calculations before implementation.
+**Exit:** deterministic whole-toman rounding/tax/stacking and concurrent coupon tests pass.
 
 ## Phase 5 — Customers and cart
 Customer profiles/addresses, guest/authenticated carts, login merge, server-side recalculation and expiry.
