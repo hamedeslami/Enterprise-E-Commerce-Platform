@@ -13,7 +13,7 @@ Implement customer and staff identity on the existing API-first Modular Monolith
 Support two independent sign-in methods:
 
 1. Username + password, with password hashing and account lifecycle handled by ASP.NET Core Identity.
-2. SMS OTP to a previously verified mobile number.
+2. SMS OTP sent by text message to a previously verified mobile number. **The owner explicitly confirmed SMS as the OTP delivery channel on 2026-11-14.**
 
 OTP sign-in must not silently register a new account. Registration and phone verification are explicit flows. A login OTP is bound to the customer, normalized phone number, purpose and one challenge. A phone number that is unknown, unverified or not eligible must not be disclosed through distinguishable API responses.
 
@@ -35,7 +35,7 @@ Do not issue a normal access/refresh session after the password step alone. Use 
 
 ## SMS OTP design
 
-OTP delivery is provider-independent. Define a narrow delivery interface and keep provider credentials/configuration outside source control. Do not select or integrate a specific Iranian SMS vendor until the owner chooses one.
+SMS is the confirmed OTP delivery channel. Delivery remains provider-independent: define a narrow SMS delivery interface and keep provider credentials/configuration outside source control. The specific Iranian SMS vendor is intentionally deferred until the owner selects one.
 
 ### Challenge lifecycle
 
@@ -117,7 +117,7 @@ Use UUIDv7 for application-generated entity IDs. Verify that Identity entity/rol
 
 ## Deferred choices
 
-- Iranian SMS provider and its delivery/template/API contract.
+- Specific Iranian SMS provider and its delivery/template/API contract (SMS channel itself is confirmed).
 - Exact production frontend/API origin topology and cookie SameSite/Domain settings.
 - Edge/WAF/CDN product and production rate-limit thresholds.
 - Whether to add Redis after measured need.
