@@ -1,5 +1,6 @@
 using Ecommerce.Modules.Identity.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -27,6 +28,6 @@ public sealed class IdentityPersistenceTests : IClassFixture<ApiFactory>
             .FindProperty(nameof(Ecommerce.Modules.Identity.Domain.ApplicationUser.Id));
 
         Assert.NotNull(userId);
-        Assert.Value(false, userId!.ValueGenerated);
+        Assert.Equal(ValueGenerated.Never, userId!.ValueGenerated);
     }
 }
