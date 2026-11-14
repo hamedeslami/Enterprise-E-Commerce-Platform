@@ -20,7 +20,7 @@ UserAccount (login identity, normalized identifiers, password hash, account stat
 Product (name, slug, descriptions, type, publication/visibility, SKU policy, brand, taxonomy and metadata); ProductVariant (variation-specific attributes, SKU, media and purchasable configuration); ProductAttribute and AttributeValue; Category (hierarchy); Brand; Tag; product-media associations. Product types include simple, variable, grouped, virtual, downloadable and external/affiliate. Each type requires explicit purchase and stock behavior.
 
 ### Inventory
-StockItem (purchasable product/variant reference, on-hand, reserved and backorder policy); StockReservation (quantity, expiry, status and checkout/order reference); StockMovement (append-only adjustment/sale/restock/reservation-release history). Available stock is derived from on-hand less active reservations, subject to backorder policy. Concurrent reservations must not oversell when backorders are disabled.
+StockItem (purchasable product/variant reference, stock-management flag, on-hand quantity and effective backorder policy); StockReservation (quantity, expiry, status and checkout/order reference); StockMovement (append-only adjustment/sale/restock/reservation-release history). Stock management can be disabled for products/variants that do not require physical stock tracking. Backorder policy is configurable at product and variant level, defaults to `NoBackorders`, and supports `NoBackorders`, `AllowBackorders` and `AllowBackordersNotify`. A variant-level policy overrides the product-level policy. Available stock is derived from on-hand less active reservations. When backorders are disabled, concurrent reservations must never allocate more than available stock; when enabled, overselling is permitted only as an explicit policy decision.
 
 ### Pricing, taxes and promotions
 Price (whole-integer amount denominated in toman for the initial Iranian store, regular/sale values and schedule); TaxClass, TaxRate and TaxRule; Coupon (discount type/value, validity, usage limits and customer/product/category restrictions); Promotion (automatic rule with eligibility and stacking policy). Calculations are server-owned. Stored and externally represented amounts are whole toman integers. Percentage/rate calculations may use a higher-precision intermediate, then must round to a whole toman under one explicit, consistently applied and tested policy. Applicable Iranian tax rules, tax-inclusive/exclusive behavior and discount stacking must be explicitly configured. Do not treat toman as an ISO 4217 code; payment-provider unit conversion belongs in the provider adapter.
@@ -43,7 +43,9 @@ Review (product, author, rating, body, moderation and verified-purchase evidence
 2. Client cannot set authoritative price, tax, discount, stock, order owner, payment status or permissions.
 3. SKU uniqueness scope must be explicitly decided and enforced.
 4. Variable product purchase requires a valid variant.
-5. Reservation and order creation are concurrency-safe and idempotent.
+5. Reservation and order creation are concurrency-safe and idempotent; two simultaneous requests cannot claim the same final unit when backorders are disabled.
+6. Backorder policy is explicit, configurable per product/variant, defaults to disabled, and variant policy overrides product policy.
+7. Reservation expiry, release and consumption are idempotent; retries cannot double-release or double-consume stock.
 6. Every on-hand stock adjustment produces a stock movement.
 7. Order captures immutable item, address, price, discount and tax snapshots.
 8. Order transitions and refund limits are validated by server-side operations.
@@ -54,7 +56,7 @@ Review (product, author, rating, body, moderation and verified-purchase evidence
 
 ## State machines to define before implementation
 
-- Reservation: Active, Consumed, Released, Expired.
+- Reservation: Active, Consumed, Released, Expired. Reservation TTL remains an owner decision to be finalized before inventory implementation.
 - Checkout: Created, Validating, AwaitingPayment, Completed, Failed, Expired.
 - Order: PendingPayment, Processing, OnHold, Completed, Cancelled, Refunded, Failed. Partial refund is an amount/record, not necessarily an order status.
 - Payment: Created, RequiresAction, Authorized, Captured, Failed, Cancelled, PartiallyRefunded, Refunded.
