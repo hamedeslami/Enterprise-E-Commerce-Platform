@@ -43,10 +43,10 @@ These delivered foundations do not mean that authentication endpoints, access JW
 
 ### Staff
 
-- Staff accounts are created only by SuperAdmin; self-registration is prohibited. SuperAdmin sets initial passwords and may reset them through audited privileged operations.
+- Staff accounts are created only by SuperAdmin; self-registration is prohibited. SuperAdmin sets initial passwords and may reset them through audited privileged operations. Both are temporary credentials and set a server-controlled `MustChangePassword` flag.
 - Staff login requires username/password followed by mandatory TOTP; a single-use recovery code is the controlled alternative.
 - SuperAdmin issues a one-time MFA enrollment invitation; the employee redeems it with their credentials, receives the TOTP setup secret directly, confirms the first code, and receives recovery codes once. SuperAdmin never sees the authenticator secret/recovery codes.
-- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials. Staff cannot log in before MFA enrollment is complete.
+- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials. Staff cannot log in before MFA enrollment is complete. After successful MFA, a Staff member with `MustChangePassword=true` receives only a restricted 10-minute password-change credential; no normal session is issued until password change succeeds.
 - The fifth failed MFA submission within a rolling 15-minute account window causes a 15-minute temporary authentication lockout across transactions/devices.
 - SMS OTP is not a Staff factor.
 - Staff endpoints reject Customer accounts.
@@ -90,7 +90,7 @@ Each slice is separately reviewable. Do not proceed to the next slice until the 
 - Identifier normalization, Customer-only database uniqueness and account-type separation.
 - Verified email/mobile password login; verified-mobile OTP login and anti-enumeration.
 - OTP purpose, expiry, resend invalidation, single use, attempts, quotas, transactional outbox, provider failover/retry, expiry cleanup and concurrency.
-- Staff provisioning authorization, password reset session revocation, invitation redemption, TOTP enrollment confirmation, recovery-code one-time display, MFA replay prevention, fifth-failure/15-minute lockout and audit.
+- Staff provisioning authorization, temporary-password flag on create/reset, mandatory post-MFA password change, restricted password-change credential, atomic password update + flag clear + session creation, password reset session revocation, invitation redemption, TOTP enrollment confirmation, recovery-code one-time display, MFA replay prevention, fifth-failure/15-minute lockout and audit.
 - DELETE /sessions idempotently revokes all Customer/Staff sessions including current and clears current browser cookies.
 - Session creation, lifetime bounds, hash-only refresh persistence and refresh replay/concurrency.
 - Cookie flags, CSRF, hostile/missing Origin, exact CORS, role matrix and IDOR.
@@ -104,6 +104,6 @@ The authoritative register and closure evidence are in [TECHNICAL-DEBT.md](TECHN
 
 ## Slice 2C design review resolution
 
-PR #10 remains an open, documentation-only draft. The seven findings from the first review and four findings from the second review have been incorporated into [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md) and synchronized with SECURITY, PROGRESS, ROADMAP and TECHNICAL-DEBT. The latest design now specifies SuperAdmin-only Staff provisioning/password management, employee-controlled one-time MFA enrollment/reset, a 15-minute account-wide lockout after five failed MFA attempts (including session/refresh revocation), idempotent DELETE /sessions sign-out-all, and a PostgreSQL transactional SMS outbox with primary/secondary provider failover, bounded retries and expiry cleanup.
+PR #10 remains an open, documentation-only draft. The seven findings from the first review and four findings from the second review have been incorporated into [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md) and synchronized with SECURITY, PROGRESS, ROADMAP and TECHNICAL-DEBT. The latest design now specifies SuperAdmin-only Staff provisioning/password management, temporary initial/reset passwords with mandatory post-MFA password change before normal session issuance, employee-controlled one-time MFA enrollment/reset, a 15-minute account-wide lockout after five failed MFA attempts (including session/refresh revocation), idempotent DELETE /sessions sign-out-all, and a PostgreSQL transactional SMS outbox with primary/secondary provider failover, bounded retries and expiry cleanup.
 
 No authentication endpoint, JWT issuance, login cookie, OTP challenge/outbox worker, Staff MFA enrollment/transaction, TOTP or recovery-code implementation has been added. CI and a fresh review of the latest head must pass, followed by explicit owner approval, before implementation.
