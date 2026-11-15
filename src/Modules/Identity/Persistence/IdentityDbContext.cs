@@ -15,9 +15,14 @@ public sealed class IdentityDbContext(
         builder.HasDefaultSchema(Schema);
         base.OnModelCreating(builder);
 
-        builder.Entity<ApplicationUser>()
-            .Property(user => user.Id)
-            .ValueGeneratedNever();
+        builder.Entity<ApplicationUser>(user =>
+        {
+            user.Property(entity => entity.Id).ValueGeneratedNever();
+            user.Property(entity => entity.AccountType).IsRequired();
+            user.ToTable(table => table.HasCheckConstraint(
+                "CK_AspNetUsers_AccountType",
+                "\"AccountType\" IN (1, 2)"));
+        });
 
         builder.Entity<ApplicationRole>()
             .Property(role => role.Id)
@@ -26,7 +31,7 @@ public sealed class IdentityDbContext(
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        ValidateUuidV7Identifiers();
+        ValidateAddedIdentityEntities();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
@@ -34,15 +39,17 @@ public sealed class IdentityDbContext(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
-        ValidateUuidV7Identifiers();
+        ValidateAddedIdentityEntities();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    private void ValidateUuidV7Identifiers()
+    private void ValidateAddedIdentityEntities()
     {
         var invalidUser = ChangeTracker
             .Entries<ApplicationUser>()
-            .Any(entry => entry.State == EntityState.Added && !IsUuidV7(entry.Entity.Id));
+            .Any(entry => entry.State == EntityState.Added &&
+                (!IsUuidV7(entry.Entity.Id) ||
+                 entry.Entity.AccountType is not (AccountType.Customer or AccountType.Staff)));
 
         var invalidRole = ChangeTracker
             .Entries<ApplicationRole>()
@@ -51,21 +58,14 @@ public sealed class IdentityDbContext(
         if (invalidUser || invalidRole)
         {
             throw new InvalidOperationException(
-                "New Identity users and roles must use application-generated UUIDv7 identifiers.");
+                "New Identity users require an application-generated UUIDv7 and an explicit Customer or Staff account type; roles require UUIDv7 identifiers.");
         }
     }
 
     private static bool IsUuidV7(Guid value)
     {
-        if (value == Guid.Empty)
-        {
-            return false;
-        }
-
+        if (value == Guid.Empty) return false;
         var formatted = value.ToString("N");
-        var hasVersionSeven = formatted[12] == '7';
-        var hasRfc4122Variant = formatted[16] is '8' or '9' or 'a' or 'b';
-
-        return hasVersionSeven && hasRfc4122Variant;
+        return formatted[12] == '7' && formatted[16] is '8' or '9' or 'a' or 'b';
     }
 }

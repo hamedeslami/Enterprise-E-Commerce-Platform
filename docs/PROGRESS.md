@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 2 Identity persistence foundation is merged through PR #6. Session/token lifecycle and browser security design are documented on `phase-2/session-token-design` in open Draft PR #7; this design-only PR is not merged. No authentication endpoints or token/session persistence have been implemented yet. CI run #147 passed both `build-and-test` and `compose-smoke-test` on the earlier PR #7 head `624cf95c630a855ece591d3d2ddf11ede0eff18d`. After the final refresh-replay design corrections, the latest PR #7 head `881a41fd5bb65dc1ed26def062c0af0ebae71198` also passed both checks (`build-and-test` and `compose-smoke-test`; GitHub Actions runs #43686457891 and #43686455765).
+**Status:** Phase 2 Identity persistence and session/token lifecycle design are merged (PRs #6 and #7). Implementation is underway. This branch adds explicit Customer/Staff account classification; no authentication endpoints or token/session persistence have been implemented yet. CI run #147 passed both `build-and-test` and `compose-smoke-test` on the earlier PR #7 head `624cf95c630a855ece591d3d2ddf11ede0eff18d`. After the final refresh-replay design corrections, the latest PR #7 head `881a41fd5bb65dc1ed26def062c0af0ebae71198` also passed both checks (`build-and-test` and `compose-smoke-test`; GitHub Actions runs #43686457891 and #43686455765).
 
 ## Repository
 
@@ -50,6 +50,8 @@
 - PR #5 merged into `main`; CI run #54 passed both `build-and-test` and `compose-smoke-test`.
 
 ## Phase 2 implementation progress
+
+- In progress on `phase-2/account-type-foundation`: explicit `AccountType` (`Customer` / `Staff`) persisted independently of roles, with application validation and a PostgreSQL check constraint. Migration intentionally fails if existing users require classification; no implicit backfill is permitted.
 
 - Added the `Ecommerce.Modules.Identity` project and registered it in the API host.
 - Added a module-owned `IdentityDbContext` mapped to PostgreSQL schema `identity`.
