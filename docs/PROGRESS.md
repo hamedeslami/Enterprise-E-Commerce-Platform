@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** PRs #6 (Identity persistence), #7 (session/token security design) and #8 (explicit AccountType) are merged. Slice 2B is in progress on `phase-2/session-refresh-persistence`: session/refresh persistence and atomic refresh rotation are implemented; CI is running against commit `2b7f19d0af216e1e0bbf7e080ffb30a2b24cf95f`.
+**Status:** PRs #6 (Identity persistence), #7 (session/token security design) and #8 (explicit AccountType) are merged. Slice 2B is in progress on `phase-2/session-refresh-persistence`. Code commit `2b7f19d0af216e1e0bbf7e080ffb30a2b24cf95f` passed CI run #184 (`build-and-test` and `compose-smoke-test`). The latest branch head also includes a documentation synchronization commit.
 
 ## Repository
 
