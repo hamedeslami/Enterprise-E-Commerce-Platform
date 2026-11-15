@@ -1,215 +1,221 @@
 # Slice 2C — Authentication Ceremony Design
 
-**Status:** Proposed implementation contract, based on owner-approved decisions. This document is design-only; it does not claim that authentication endpoints or cryptographic flows are implemented.
+**Status:** Proposed implementation contract, updated after the design review. This document is design-only; no authentication endpoint, credential issuance flow or cryptographic ceremony is implemented by this PR.
 
 ## 1. Scope and boundaries
 
-Slice 2C defines how a Customer or Staff account proves identity and transitions into the already-designed session/token lifecycle.
-
-It builds on the merged Identity persistence foundation, explicit `AccountType`, and the merged `AuthSession` / `RefreshToken` persistence and atomic rotation service.
+Slice 2C defines how Customer and Staff accounts authenticate and transition into the merged session/token lifecycle.
 
 Included:
-- Customer password sign-in using either a verified email address or a verified mobile number.
-- Customer SMS OTP sign-in using only a previously verified mobile number.
-- Staff password sign-in followed by mandatory TOTP MFA or a single-use recovery code.
-- Shared initial session creation, access JWT issuance and separate access/refresh HttpOnly cookies.
-- Identifier normalization, uniqueness, enumeration resistance, endpoint contracts and security tests.
+- Customer password sign-in using a verified email or verified Iranian mobile.
+- Customer SMS OTP sign-in for an existing Customer with a previously verified mobile.
+- Staff password sign-in followed by mandatory TOTP or a single-use recovery code.
+- One shared session-creation boundary, access JWT issuance and separate access/refresh cookies.
+- Identifier normalization, database uniqueness, endpoint contracts, abuse controls and security verification.
 
-Not included:
-- Customer registration, email confirmation, phone verification, password reset/change, MFA enrollment/reset UI, passkeys/WebAuthn.
-- Selection of an Iranian SMS vendor or production KMS/HSM/secret manager.
-- Frontend implementation.
-- Any claim of production security certification.
+Not included: registration, email confirmation, phone verification, password reset/change, MFA enrollment/reset UI, passkeys/WebAuthn, frontend work, SMS-vendor selection or production KMS/HSM selection. This document is not a production security certification.
 
-No normal authenticated session may be created before the relevant authentication ceremony completes.
+No normal authenticated session may exist before the relevant authentication ceremony completes.
 
 ## 2. Owner-approved authentication policy
 
 ### Customer
 
-A Customer may sign in with:
-1. **Email + password**, only when `EmailConfirmed == true`.
-2. **Mobile + password**, only when `PhoneNumberConfirmed == true`.
-3. **SMS OTP**, only to an existing Customer account whose mobile number is already verified.
+A Customer may authenticate using:
+1. Email + password, only when EmailConfirmed is true.
+2. Mobile + password, only when PhoneNumberConfirmed is true.
+3. SMS OTP, only for an existing Customer account whose mobile is already verified.
 
-The customer password endpoint accepts one `identifier` plus `password`. The server classifies the identifier as email or mobile after normalization; the client does not choose an account type or lookup mode.
-
-Email confirmation and phone confirmation are mandatory for their respective password-login paths. The same phone-verification requirement applies to OTP login. An OTP login must never create/register an account.
+The password endpoint accepts one identifier and password. The server normalizes and classifies the identifier; the client cannot choose account type or lookup mode. OTP login never creates an account.
 
 ### Staff
 
-Staff sign-in is:
-1. Username + password.
-2. Mandatory TOTP verification, or a single-use recovery code as the controlled recovery alternative.
+Staff authentication is username + password followed by mandatory TOTP. A single-use recovery code is the controlled recovery alternative. SMS OTP is never a Staff factor.
 
-Password success creates only a short-lived MFA transaction. It MUST NOT create an `AuthSession`, access JWT, refresh token, or normal authentication cookies. SMS OTP is not a Staff factor.
+Password success creates only a short-lived, purpose-bound MFA transaction. It MUST NOT create an AuthSession, access JWT, refresh token or normal authentication cookie.
 
-A Staff account cannot authenticate through Customer endpoints; a Customer account cannot authenticate through Staff endpoints. The server derives and enforces `AccountType` from the persisted user record.
+Every endpoint enforces the persisted AccountType. Customer endpoints never fall back to Staff records; Staff endpoints never fall back to Customer records.
 
-## 3. Identifier rules
+## 3. Identifier and database uniqueness contract
 
 ### Email
 
-- Trim surrounding whitespace and normalize using the configured ASP.NET Core Identity `ILookupNormalizer` / `NormalizeEmail` behavior.
-- Do not apply provider-specific transformations such as removing dots or plus-tags.
-- Customer email uniqueness is enforced by PostgreSQL on the normalized email for Customer rows; application pre-checks are only for user-friendly errors and are not authoritative.
-- Password login resolves only Customer accounts and requires `EmailConfirmed == true`.
-- Do not disclose whether an email exists, is unconfirmed, belongs to Staff, or has a wrong password.
+- Trim surrounding whitespace and normalize using the configured ASP.NET Core Identity ILookupNormalizer / NormalizeEmail behavior.
+- Do not remove provider-specific dots or plus-tags.
+- Customer email uniqueness is enforced by PostgreSQL on NormalizedEmail for Customer rows. Application pre-checks are only for user-friendly errors.
+- Email password login requires EmailConfirmed = true.
+- Public responses do not disclose existence, confirmation state, account type, lockout or password correctness.
 
-### Iranian mobile number
+### Iranian mobile
 
-- Accept the explicitly supported input forms `09xxxxxxxxx` and `+989xxxxxxxxx`; normalize Persian/Arabic numerals to ASCII before parsing.
-- Store and compare one canonical E.164 representation: `+989xxxxxxxxx`.
-- Reject malformed, ambiguous or unsupported formats; do not silently guess country codes.
-- Customer mobile uniqueness is enforced by PostgreSQL on the canonical number for Customer rows.
-- Password and OTP login both require `PhoneNumberConfirmed == true`.
+- Accept only 09xxxxxxxxx and +989xxxxxxxxx.
+- Convert Persian and Arabic numerals to ASCII before parsing.
+- Store PhoneNumber in canonical E.164 form: +989xxxxxxxxx.
+- Reject malformed, ambiguous and unsupported formats; do not guess country codes.
+- Customer mobile uniqueness is enforced by PostgreSQL on canonical PhoneNumber for Customer rows.
+- Password and OTP login require PhoneNumberConfirmed = true.
 - Unknown, unverified, Staff-owned and otherwise ineligible numbers receive indistinguishable public OTP-request responses.
 
-### ASP.NET Core Identity compatibility
+### Identity compatibility and exact index scope
 
-The existing `ApplicationUser` inherits Identity's `UserName`, `NormalizedUserName`, `Email`, `NormalizedEmail`, `PhoneNumber`, and confirmation flags. The login contract must not accidentally make Customer username a third login identifier.
+The existing Identity table is identity.AspNetUsers. Preserve the global unique UserNameIndex on NormalizedUserName; it remains the Staff username uniqueness boundary. Customer username is never a login identifier. If Identity requires a username, generate an opaque server-side value that is not derived from email/mobile and is never accepted by Customer login endpoints.
 
-Implementation must inspect Identity's username validator and unique index behavior before changing persistence. If Identity requires a username for every user, Customer usernames must be server-generated opaque internal values that are never accepted by Customer login endpoints; Staff usernames remain explicitly provisioned and unique. Do not derive a customer username from an email/phone or expose it as a login route.
+The current Identity model has a non-unique EmailIndex on NormalizedEmail. That index is not a uniqueness guarantee. Keep it unless a reviewed migration replaces it with an equivalent lookup index, and add these unique partial indexes:
 
-Database uniqueness requirements:
-- Staff usernames remain unique through Identity's normalized-username unique index.
-- Customer normalized email is unique among Customer accounts when non-null.
-- Customer canonical phone is unique among Customer accounts when non-null.
-- These must be database constraints/indexes, not check-then-insert application logic.
-- If Staff contact email/phone may overlap a Customer login identifier, the partial Customer-only uniqueness scope must be retained. Account-type conversion must revalidate uniqueness and remain privileged, audited and session-revoking.
+- Customer email: unique index on identity.AspNetUsers (NormalizedEmail) with predicate AccountType = 1 AND NormalizedEmail IS NOT NULL.
+- Customer mobile: unique index on identity.AspNetUsers (PhoneNumber) with predicate AccountType = 1 AND PhoneNumber IS NOT NULL.
+
+AccountType value 1 is Customer, as defined by the persisted enum. Empty or whitespace email/mobile values are not valid “absent” values: normalize absence to SQL NULL before persistence. Add database check constraints so non-null NormalizedEmail and PhoneNumber cannot be empty strings; PhoneNumber, when non-null, must already be canonical E.164. This makes the partial-index predicates exact and avoids multiple empty values being treated as valid identifiers. Existing rows must be audited and normalized before creating the indexes; migration must fail atomically on conflicting Customer identifiers rather than silently choosing a winner.
+
+The unique global normalized-username index remains in force for both account types. Staff contact email/phone may overlap Customer login identifiers because the Customer partial indexes intentionally scope only AccountType = 1.
+
+Changing AccountType is a privileged, audited operation in one PostgreSQL transaction. The update must satisfy all destination-type uniqueness constraints; any collision aborts the entire transaction. Successful account-type change revokes all sessions in the same transaction. No application check-then-write is authoritative.
 
 ## 4. Endpoint contracts
 
-All endpoints are under `/api/v1/auth`. Request DTOs contain no token fields. Access and refresh credentials are returned only through response cookies after successful completion.
+All routes are under /api/v1/auth. DTOs contain no token fields. Credentials are returned only through response cookies after successful completion.
 
 | Method and path | Purpose | Session created? |
 |---|---|---:|
-| POST `/customer/password/login` | Customer email/mobile + password | Yes, on success |
-| POST `/customer/otp/request` | Request login OTP for verified Customer mobile | No |
-| POST `/customer/otp/verify` | Verify purpose-bound Customer login OTP | Yes, on success |
-| POST `/staff/login` | Staff username + password | No |
-| POST `/staff/mfa/verify` | Complete Staff TOTP/recovery ceremony | Yes, on success |
-| POST `/refresh` | Rotate refresh token and issue new access token | Existing session only |
-| POST `/logout` | Revoke current session and clear cookies | Revokes |
-| GET `/sessions` | List current Customer's own sessions | No |
-| DELETE `/sessions/{sessionId}` | Revoke an owned non-current session | No |
+| POST /customer/password/login | Customer email/mobile + password | Yes, on success |
+| POST /customer/otp/request | Request login OTP for verified Customer mobile | No |
+| POST /customer/otp/verify | Verify purpose-bound Customer login OTP | Yes, on success |
+| POST /staff/login | Staff username + password | No |
+| POST /staff/mfa/verify | Complete Staff TOTP/recovery ceremony | Yes, on success |
+| POST /refresh | Rotate refresh token and issue access token | Existing session |
+| POST /logout | Revoke current session and clear cookies | Revokes |
+| GET /sessions | List the current actor's own sessions | No |
+| DELETE /sessions/{sessionId} | Revoke an owned non-current session | No |
+| DELETE /staff/{staffUserId}/sessions/{sessionId} | Security-admin revocation of a Staff session | No |
 
-Every unsafe cookie-authenticated request requires the approved CSRF request token and exact trusted Origin validation. The login and OTP-request endpoints are still subject to Origin/CORS policy and endpoint-specific abuse controls; CSRF protection must be applied consistently to cookie-authenticated state changes.
+The self-session routes are actor-generic: the authenticated Customer or Staff actor can list only their own sessions and revoke only their own non-current sessions. The response identifies the current session. Neither actor can revoke the current session through the single-session route; use logout or the explicit sign-out-all-devices action for that. Customer sign-out-all revokes all of that Customer's sessions, including current. Staff self-service sign-out-all follows the same rule.
 
-### Customer password request
+The staff-to-staff route requires a dedicated SecurityAdmin permission, Staff AccountType and completed MFA. It verifies that the target session belongs to the target Staff user, prevents cross-account IDOR, records actor/target/session/reason in the audit log and performs revocation atomically. It does not permit a Customer actor or ordinary Staff role to revoke another Staff member's sessions.
 
-```json
-{
-  "identifier": "customer@example.com",
-  "password": "..."
-}
-```
+Every unsafe cookie-authenticated request requires the approved antiforgery request token and exact trusted Origin validation. Login and OTP-request endpoints remain subject to exact Origin/CORS policy and endpoint-specific abuse controls.
 
-The same `identifier` field accepts a supported mobile format. Do not accept `accountType`, `userId`, role, session lifetime, authentication method or verification flags from the client.
+### Customer password
 
-Success: issue the session and cookies; return a minimal authenticated result (for example, user ID and safe account summary) with no raw tokens.
+Request contains identifier and password. The identifier may be email or one of the supported mobile formats. Do not accept accountType, userId, role, session lifetime, authentication method or verification flags from the client.
 
-Failure: use a generic authentication failure response for unknown identifier, wrong password, unconfirmed email/mobile, disabled/locked account, or account-type mismatch. Internal telemetry may record a controlled reason code without logging the identifier/password in clear text.
+Success creates a session and sets cookies; JSON contains only a minimal safe account result and no raw token. Failure is generic for unknown identifier, wrong password, unconfirmed identifier, disabled/locked account or account-type mismatch.
 
-### Customer OTP request
+### Customer OTP
 
-```json
-{
-  "mobileNumber": "09123456789"
-}
-```
+OTP request accepts mobileNumber. Its public response is generic for every outcome. Apply phone/IP/global quotas and risk controls; only a verified Customer mobile receives a login-purpose challenge.
 
-Use a generic response for all outcomes so the endpoint does not reveal account existence or verification state. Apply phone/IP/global quotas before provider invocation and account lookup where practical. Only a verified Customer mobile may receive a login-purpose OTP.
+OTP verification accepts mobileNumber and code. The server resolves the canonical mobile and active Customer-login challenge. The challenge is purpose-bound, time-bounded, attempt-limited, single-use and atomic. Concurrent submissions cannot create multiple sessions from one challenge.
 
-### Customer OTP verification
+### Staff password and MFA
 
-```json
-{
-  "mobileNumber": "09123456789",
-  "code": "123456"
-}
-```
+Staff login accepts username and password. Success creates a single-use MFA transaction and sets only the dedicated MFA cookie. It does not authenticate the browser or issue normal session credentials.
 
-The server resolves the canonical mobile and active login challenge; challenge ID need not be exposed unless a reviewed anti-enumeration design requires it. Verification is purpose-bound, time-bounded, attempt-limited, single-use and atomic in PostgreSQL. Successful verification consumes the challenge and creates exactly one Customer session in the same logical authentication completion flow. Concurrent valid submissions must not create multiple sessions from one challenge.
+MFA verification accepts either a TOTP code or a recovery code. The server resolves the pending transaction from the dedicated cookie; never accept client-supplied user ID or transaction owner. Validate purpose, expiry, cancellation/consumption state and bounded failed attempts.
 
-### Staff password request
+## 5. Shared session creation and transaction boundary
 
-```json
-{
-  "username": "staff.login",
-  "password": "..."
-}
-```
+All completed ceremonies use one server-side session-creation service. It accepts only trusted server-side user ID, persisted AccountType, server-selected AuthenticationMethod, validated lifetime policy, database time and privacy-reviewed device metadata.
 
-Success does not authenticate the browser. It creates a purpose-bound, single-use, short-lived Staff MFA transaction and sets only the dedicated `__Host-staff-mfa` cookie. The response indicates that MFA is required without disclosing unnecessary account data.
+Authentication-method mapping:
+- Customer password via email or mobile -> Password.
+- Customer SMS OTP -> SmsOtp.
+- Staff password + TOTP -> PasswordTotp.
+- Staff password + recovery code -> PasswordRecoveryCode.
 
-Failure responses are generic. Apply progressive throttling and Identity lockout policy without creating a trivial account-lockout denial-of-service vector.
+### Required atomicity
 
-### Staff MFA verification
+For Customer OTP and Staff MFA completion, the following state changes MUST commit or roll back together in one PostgreSQL transaction using the same IdentityDbContext/connection:
 
-TOTP request:
+1. Lock and revalidate the OTP challenge or Staff MFA transaction.
+2. For Staff TOTP, atomically advance the authenticator's last accepted time-step; for recovery, atomically consume the selected recovery code.
+3. Consume the OTP challenge or Staff MFA transaction.
+4. Revalidate account enabled state, expected AccountType and current authorization state.
+5. Insert exactly one AuthSession.
+6. Insert exactly one initial opaque 256-bit RefreshToken, persisting only SHA-256(secret).
 
-```json
-{
-  "code": "123456"
-}
-```
+No one-time factor may be consumed without the session and initial refresh token being committed. No session may be committed while the factor remains reusable. Password-based Customer session creation uses the same session/refresh transaction but has no one-time challenge to consume.
 
-Recovery request:
+Generate session identifiers, refresh secret and token claims from server-side state. Access JWT signing must complete before the database transaction commits so signing failure rolls back factor consumption and session persistence. Signing in this transaction must be a bounded local signing operation; do not perform an unbounded remote network call while holding database locks. Cookie serialization/options must be validated before commit. Cookies are appended only after a successful commit. If commit fails, no credentials are returned.
 
-```json
-{
-  "recoveryCode": "..."
-}
-```
+If the database commit succeeds but the HTTP response is lost before the browser receives cookies, the resulting session is unreachable to that browser. Do not weaken strict refresh replay or add a retry grace period. The orphan remains bounded by the session's initial idle expiry (Customer: at most seven days; Staff: at most thirty minutes) and absolute expiry; a cleanup job must revoke/expire sessions that have passed idle/absolute expiry and remove expired refresh credentials according to retention policy. The user can authenticate again, creating a separate session. Do not attempt to infer successful cookie delivery from server-side response completion.
 
-The server identifies the pending transaction from the dedicated cookie; never accept a client-supplied user ID or transaction owner. Validate transaction purpose, expiry, cancellation/consumption state and bounded failed attempts. Consume the transaction and (for recovery) the recovery code atomically with session creation. A recovery code is single-use and stored only as a cryptographic hash.
+### Session policy
 
-## 5. Session creation and token issuance
+- Customer: 30-day absolute / 7-day idle.
+- Staff: 12-hour absolute / 30-minute idle.
+- Absolute expiry never slides; idle expiry extends only after successful refresh.
+- Use UTC/database time and enforce IdleExpiresAt <= AbsoluteExpiresAt.
+- Load current roles from server-side Identity data; never copy roles or assurance from client/JWT state.
+- Access JWT is RS256, maximum five minutes, with approved minimal claims and server-issued role claims.
+- Session and initial refresh-token insertion are atomic. Persist only SHA-256(refresh secret), never the raw secret.
+- No raw access/refresh token in JSON, logs, traces or exceptions.
 
-Slice 2C must add one shared server-side session-creation boundary used only after a completed authentication ceremony. Do not duplicate session/token creation logic across Customer and Staff endpoints.
+## 6. Staff MFA, TOTP and recovery codes
 
-Inputs are trusted server-side values:
-- Persisted user ID and persisted `AccountType`.
-- A server-selected `AuthenticationMethod`.
-- Current database-backed time/policy and validated session lifetime options.
-- Optional privacy-reviewed device metadata.
+### TOTP profile
 
-Allowed mappings:
-- Customer password via email or mobile -> `AuthenticationMethod.Password`.
-- Customer SMS OTP -> `AuthenticationMethod.SmsOtp`.
-- Staff password + TOTP -> `AuthenticationMethod.PasswordTotp`.
-- Staff password + recovery code -> `AuthenticationMethod.PasswordRecoveryCode`.
+Use RFC 6238 with this fixed initial interoperability profile:
+- HMAC-SHA-1.
+- Six decimal digits.
+- 30-second time-step.
+- T0 = 0 (Unix epoch).
+- Accept at most one step in the past and one step in the future (±1); do not widen dynamically.
+- Use a cryptographically secure random TOTP secret; encrypt it at rest using the approved Data Protection boundary or a reviewed equivalent. Never return it after enrollment or log it.
+- Enrollment remains pending until the first generated code is successfully verified.
 
-The session creator must:
-1. Re-read or use a transactionally validated user state and ensure the account is enabled, eligible and has the expected AccountType.
-2. Load current server-side roles; never copy roles or assurance from request/JWT/client state.
-3. Select Customer (30-day absolute / 7-day idle) or Staff (12-hour absolute / 30-minute idle) policy from validated server configuration.
-4. Use UTC/database time and enforce `IdleExpiresAt <= AbsoluteExpiresAt`.
-5. Create one UUIDv7 `AuthSession` and exactly one initial opaque 256-bit refresh token in a transaction. Persist only SHA-256(refresh secret), never the raw secret.
-6. Mint a short-lived RS256 access JWT (maximum five minutes) with the approved minimal claims and server-issued role claims.
-7. Set separate host-only HttpOnly cookies on `api.shop.com`; use Secure in production, SameSite=Lax, Path=/, explicit expiry and no Domain attribute. Prefer `__Host-` names where their cookie-prefix requirements are met.
-8. Return no raw access/refresh token in JSON, logs, traces or exceptions.
+Persist LastAcceptedTimeStep per authenticator. A submitted code is valid only if its matching step is greater than LastAcceptedTimeStep. If more than one candidate step matches, select the greatest matching step that is still within the allowed window and greater than the persisted value. Advance the value with a conditional database update or row lock in the same transaction as MFA transaction consumption and session creation. A concurrent duplicate submission must have at most one winner. A code from an already accepted step is rejected even while it remains inside the clock-skew window.
 
-If session persistence succeeds but signing/cookie preparation fails, the implementation must not leave an unexpectedly usable orphan credential. Define transaction/compensation boundaries so session and initial refresh-token creation are atomic; do not send cookies before all required server-side work succeeds. A failed response must not disclose credentials.
+If a future implementation changes algorithm/digits/period, it is a new reviewed interoperability decision and must update authenticator enrollment metadata and URI parameters; do not silently change this profile.
 
-Production key custody remains governed by TD-SEC-002; production Data Protection remains governed by TD-SEC-001. Local development may use isolated development keys, but production must fail closed without approved key material.
+### MFA transaction
 
-## 6. Staff MFA transaction and TOTP requirements
+- Lifetime is server-configured but never greater than five minutes.
+- Pre-authentication secret is cryptographically random, opaque and high entropy; persist only a hash.
+- Cookie is __Host-staff-mfa; production attributes are Secure, HttpOnly, SameSite=Lax, Path=/, no Domain, maximum five-minute lifetime.
+- Transaction is bound to one Staff user and one fixed purpose.
+- It can only complete/cancel that transaction; it cannot be upgraded without successful MFA.
+- Failed attempts are bounded. Consume/cancel/expire atomically.
+- Password success does not reset or bypass MFA attempt policy.
 
-- MFA transaction lifetime: maximum five minutes, server-configured but never greater than five minutes.
-- Pre-authentication secret: cryptographically random, opaque and high entropy; persist only a hash.
-- Cookie: `__Host-staff-mfa`, Secure, HttpOnly, SameSite=Lax, Path=/, no Domain, maximum five-minute lifetime.
-- Transaction is bound to one Staff user and one fixed purpose; it cannot be upgraded into a normal session except by successful MFA completion.
-- Bound failed attempts; consume/cancel/expire atomically. Password success must not reset or bypass MFA attempt policy.
-- TOTP secret is encrypted at rest using the approved Data Protection boundary or a reviewed equivalent; it is never returned after enrollment and never logged.
-- TOTP enrollment is not active until a generated code is verified.
-- Validate TOTP with a small, explicit clock-skew window and prevent replay of an already accepted time-step for the same authenticator. Persist the last accepted time-step/counter atomically to prevent concurrent reuse.
-- Recovery codes are generated with a cryptographically secure RNG, displayed once, stored only as hashes, single-use and consumed atomically.
-- MFA reset/recovery and recovery-code use are audited. No support/admin override may silently bypass MFA.
-- SMS is not an acceptable Staff second factor.
+### Recovery codes
 
-## 7. OTP security and abuse controls
+- Generate each code from at least 128 bits of CSPRNG entropy (16 random bytes).
+- Encode as unpadded RFC 4648 Base32 using uppercase A-Z and 2-7; display once only. UI may group characters with hyphens for readability.
+- Normalize by uppercasing and removing only the documented grouping hyphens; reject any other character or malformed length.
+- Persist only SHA-256 over a domain-separated value containing a fixed recovery-code label, the owning user ID and normalized code. No plaintext or reversible encryption is stored. Given at least 128 bits of entropy, a password KDF is not required for offline guessing resistance; retain constant-time verification/consumption behavior.
+- A recovery code is consumed atomically with MFA transaction consumption and session/refresh creation. It is one-time and cannot be reused concurrently.
+- Display each generated code once; never return it from later APIs or log it.
+- All invalid, unknown, used and wrong-owner codes produce the same public failure. Do not expose match/no-match details or provide a code-enumeration oracle.
+- Recovery-code generation, use, reset and administrative recovery are audited.
+
+SMS is not an acceptable Staff second factor. No support/admin override may silently bypass MFA.
+
+## 7. Cookie names, attributes and clearing behavior
+
+Production cookies are issued by api.shop.com as host-only cookies. No Domain attribute is ever set.
+
+| Purpose | Exact production cookie name |
+|---|---|
+| Access JWT | __Host-access-token |
+| Refresh token | __Host-refresh-token |
+| Staff MFA transaction | __Host-staff-mfa |
+
+All three production cookies use Secure, HttpOnly, SameSite=Lax and Path=/. Their expiry is explicit and never exceeds the underlying credential/transaction expiry. The __Host- prefix is valid because Secure is set, Path is exactly /, and Domain is omitted. Access and refresh remain separate cookies.
+
+Development over local HTTP uses separate names: dev-access-token, dev-refresh-token and dev-staff-mfa. These names are permitted only in the Development environment and only for the local HTTP origin. Secure=false is allowed only there. Production/Staging must reject development cookie configuration and must never emit dev-prefixed cookies. Production must never fall back to non-Secure cookies.
+
+Cookie lifecycle:
+- Successful Customer password or OTP login: set access + refresh; clear any stale staff-MFA cookie.
+- Successful Staff MFA: set access + refresh; clear staff-MFA cookie.
+- Successful Staff password pre-authentication: set/replace only staff-MFA; do not set or clear normal session cookies.
+- Failed password login or failed OTP request/verification: do not clear an unrelated existing authenticated session cookie. Keep the MFA cookie only while its transaction remains valid and attempts remain.
+- Expired, consumed, cancelled or attempt-exhausted MFA transaction: clear staff-MFA cookie.
+- Refresh success: rotate refresh and replace access cookie; refresh failure due to invalid/expired/revoked/replayed credentials clears access and refresh cookies.
+- Logout: revoke current session and clear access, refresh and staff-MFA cookies.
+- Sign-out-all-devices clears current browser's access/refresh cookies after revoking all applicable sessions.
+- Cookie deletion must use the same name, Path and host-only scope as issuance, with an expired value/Max-Age=0; never add Domain during deletion.
+
+## 8. OTP security and abuse controls
 
 Retain the approved baseline:
 - Six-digit code from a cryptographically secure RNG.
@@ -223,68 +229,77 @@ Retain the approved baseline:
 - Provider concurrency/spend budget, circuit breaker and bounded retries.
 - Generic public responses; never log raw OTP, full phone, credentials, cookies or tokens.
 
-OTP challenge purpose for this slice is specifically Customer login. Registration/phone-verification purposes are separate flows and must not be accepted by the login verifier.
+OTP purpose in this slice is specifically Customer login. Registration/phone-verification purposes are separate flows and must not be accepted by the login verifier.
 
-## 8. Failure, concurrency and authorization invariants
+## 9. Failure, concurrency and authorization invariants
 
-- Customer and Staff endpoints enforce AccountType server-side even when an identifier happens to match another account's data.
-- Customer email/mobile lookup never falls back to Staff accounts.
-- Staff username lookup never falls back to Customer accounts.
+- Customer and Staff endpoints enforce AccountType server-side.
+- Customer email/mobile lookup never falls back to Staff accounts; Staff username lookup never falls back to Customer accounts.
 - Unconfirmed email/mobile cannot authenticate by password; unverified mobile cannot receive or verify login OTP.
 - OTP verification and Staff MFA completion are single-use under concurrency.
-- A successful authentication ceremony creates one session and one initial active refresh token; duplicate submissions cannot create multiple sessions from one one-time challenge/transaction.
-- Session creation and refresh rotation use consistent session/token lock ordering from the existing session-token design. Every operation that mutates both session and refresh-token state locks session first.
-- Current roles are loaded from server-side Identity data at issuance; no client role or account classification is trusted.
-- Customer session list/revoke operations are ownership-scoped and cannot expose/revoke another customer's sessions.
-- Staff endpoints and staff sessions require Staff AccountType, appropriate role/policy and completed MFA.
-- Access JWT revocation remains bounded by its approved maximum lifetime plus clock skew; do not claim immediate stateless JWT invalidation.
+- Challenge/MFA consumption, recovery-code consumption where applicable, AuthSession insertion and initial RefreshToken insertion are atomic.
+- A successful ceremony creates exactly one session and one initial active refresh token.
+- Session creation and refresh rotation use consistent session/token lock ordering: session first, then token.
+- Self-session operations are ownership-scoped for both Customer and Staff. Security-admin Staff-to-Staff revocation is separately permissioned and audited.
+- Current roles are loaded from server-side Identity data; no client role/account classification is trusted.
+- Staff endpoints and Staff sessions require Staff AccountType, the required role/policy and completed MFA.
+- Stateless access JWT revocation remains bounded by its approved maximum lifetime plus clock skew.
 
-## 9. Required verification
+## 10. Required verification
 
 ### Identifier and account separation
 - Email normalization, case-insensitive lookup and duplicate normalized Customer email rejection at PostgreSQL level.
 - Iranian mobile numeral normalization and accepted/rejected input formats.
-- Canonical phone uniqueness for Customer accounts, including concurrent registration/update attempts.
-- Customer endpoint rejects Staff even if email/mobile matches; Staff endpoint rejects Customer even if username matches.
-- Customer username is never treated as a login identifier.
-- Email login rejects unconfirmed email; mobile password login rejects unconfirmed phone; OTP request/verify rejects unverified phone.
+- Canonical phone uniqueness for Customer accounts, including concurrent writes.
+- Exact partial-index predicates, NULL/empty-value checks, and migration failure on existing duplicates.
+- AccountType conversion collision rolls back both conversion and session revocation; successful conversion revokes all sessions atomically.
+- Customer rejects Staff and Staff rejects Customer; Customer username is never a login identifier.
 
 ### Customer password and OTP
 - Correct/incorrect password, disabled/locked account, unknown identifier and unconfirmed identifier.
 - Generic failure response and no account enumeration.
 - OTP purpose binding, expiry, resend invalidation, single use, max attempts, wrong-code behavior and concurrent verification.
+- OTP challenge consumption + session + initial refresh insertion rollback together on forced failure.
+- Concurrent duplicate OTP verification creates at most one session.
 - Quotas under concurrent requests and multiple API instances; provider timeout/failure/circuit breaker and no unbounded retry.
 - Raw password, OTP, phone and token values absent from logs/traces.
 
 ### Staff MFA
 - Password-only Staff login creates no AuthSession/access/refresh cookie.
 - Customer cannot enter Staff MFA flow.
-- TOTP success, invalid code, expired transaction, replayed time-step, concurrent duplicate code and attempt exhaustion.
-- Recovery code success, reuse rejection, concurrent consumption and audit event.
+- TOTP RFC profile test vectors, past/current/future window boundaries, stale step rejection and concurrent duplicate-step rejection.
+- MFA transaction consumption + TOTP step advance + session + initial refresh insertion roll back together on forced failure.
+- Recovery-code entropy/encoding, one-time display, normalization, wrong-owner rejection, reuse rejection and concurrent consumption.
+- Recovery-code consumption + MFA transaction + session + initial refresh insertion roll back together on forced failure.
+- Generic failures and no recovery-code enumeration.
 - TOTP secret encryption at rest and no secret disclosure.
 - Staff session is created only after MFA success.
 
-### Session, token, browser and authorization
+### Session, cookie, browser and authorization
 - Correct Customer/Staff lifetime selection and absolute-expiry cap.
 - Exactly one initial refresh token per new session; hash-only persistence.
 - RS256, key ID, issuer/audience/lifetime validation and five-minute maximum.
-- Cookie attributes, host-only scope, no Domain, CSRF token, missing/hostile Origin and exact CORS allow-list.
+- Production and Development cookie names/attributes; production never emits dev names or insecure cookies.
+- Cookie clearing behavior on refresh failure, logout, MFA completion and terminal MFA failure.
+- Lost-response orphan session remains bounded by initial idle expiry and cleanup.
+- CSRF token, missing/hostile Origin and exact CORS allow-list.
 - Refresh concurrency/replay, logout and session revocation regression tests.
-- Role matrix, horizontal/vertical escalation, IDOR and session ownership.
+- Customer and Staff self-session ownership, current-session protection, security-admin permission and audit coverage.
+- Role matrix, horizontal/vertical escalation and IDOR.
 - Build, unit tests and PostgreSQL-backed integration tests pass in CI.
 
-## 10. Implementation sequence and gates
+## 11. Implementation sequence and gates
 
 1. **2C-Design (this document):** approve endpoint, normalization, persistence and ceremony contracts before implementation.
 2. **2C-Foundation:** shared validated session policy and session-creation service; initial refresh token + access-token issuance boundary; unit/PostgreSQL tests.
 3. **2C-Customer:** email/mobile password login and verified-mobile OTP request/verify; uniqueness and anti-enumeration tests.
 4. **2C-Staff:** password pre-authentication transaction, TOTP verification, replay prevention and recovery-code consumption.
-5. **2C-Completion:** cookie/CSRF/Origin/CORS integration, authorization policies, session management endpoints and end-to-end tests.
+5. **2C-Completion:** cookie/CSRF/Origin/CORS integration, authorization policies, Customer/Staff session management endpoints and end-to-end tests.
 6. **2C-Security review:** inspect full diff, threat model, concurrency coverage, CI and debt register; no merge without explicit owner approval.
 
 Each implementation slice is a separate reviewable PR or an explicitly agreed small set of PRs. Every PR updates progress and any technical-debt rows it introduces. Do not begin the next slice until the current slice's tests and review are complete and the owner approves proceeding.
 
-## 11. Explicit non-goals and tracked production gates
+## 12. Explicit non-goals and tracked production gates
 
 No new deferral is created merely by documenting a provider-independent boundary. Existing gates remain authoritative:
 - TD-SEC-001: production Data Protection key-ring storage/protection.
