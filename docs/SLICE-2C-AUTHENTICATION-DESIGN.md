@@ -232,6 +232,7 @@ Production cookies are issued by api.shop.com as host-only cookies. No Domain at
 | Refresh token | __Host-refresh-token |
 | Staff MFA transaction | __Host-staff-mfa |
 | Staff MFA enrollment transaction | __Host-staff-enrollment |
+| Staff post-MFA password-change transaction | __Host-staff-password-change |
 
 All production cookies use Secure, HttpOnly, SameSite=Lax and Path=/. Their expiry is explicit and never exceeds the underlying credential/transaction expiry. The __Host- prefix is valid because Secure is set, Path is exactly /, and Domain is omitted. Enrollment and post-MFA password-change cookies are restricted, short-lived credentials and grant no normal session authority. Access and refresh remain separate cookies.
 
@@ -245,6 +246,7 @@ Cookie lifecycle:
 - Successful Staff password pre-authentication: set/replace only staff-MFA; do not set or clear normal session cookies.
 - Successful enrollment invitation redemption: set only staff-enrollment; never set normal auth or staff-MFA cookies.
 - Enrollment completion, cancellation, expiry or failure: clear staff-enrollment; completion does not create a session.
+- Password-change transaction success, cancellation, expiry or failure: clear staff-password-change; never issue a session unless password update and session creation both commit.
 - Successful Staff password reset: set `MustChangePassword=true`, revoke target sessions and pending MFA transactions; the target must still complete the existing enrolled factor unless SuperAdmin explicitly performs the separate MFA-reset ceremony.
 - Failed password login or failed OTP request/verification: do not clear an unrelated existing authenticated session cookie. Keep the MFA cookie only while its transaction remains valid and attempts remain.
 - Expired, consumed, cancelled or attempt-exhausted MFA transaction: clear staff-MFA cookie.
