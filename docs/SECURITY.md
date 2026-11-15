@@ -27,11 +27,11 @@ Customer email is normalized using ASP.NET Core Identity normalization; do not a
 
 ### Staff sign-in and MFA
 
-All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. A single-use recovery code is the controlled recovery alternative. Do not permit SMS OTP as a staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited.
+All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. A single-use recovery code is the controlled recovery alternative. Do not permit SMS OTP as a staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited. Staff cannot self-register: only SuperAdmin with StaffProvisioning permission may create accounts and set/reset passwords. Initial/reset passwords are communicated through a trusted channel, never embedded in the MFA invitation or SMS queue. All provisioning/password/MFA reset actions require completed SuperAdmin MFA and audit.
 
 Password success creates only a short-lived, purpose-bound MFA transaction and the dedicated `__Host-staff-mfa` cookie (maximum five minutes). It MUST NOT create a normal session, access JWT or refresh token. Issue normal session credentials only after TOTP or a single-use recovery code succeeds.
 
-TOTP secrets are encrypted at rest. Enrollment requires confirmation of a generated code before MFA becomes active. Enforce a small explicit clock-skew window and prevent accepted TOTP time-step replay, including concurrent submissions. Recovery codes are stored only as hashes, are single-use, and their use/reset is audited. Staff MFA recovery must not provide an unauthenticated bypass.
+TOTP secrets are encrypted at rest. SuperAdmin initiates a single-use, 24-hour maximum MFA enrollment invitation; the employee redeems it with their username and admin-provided password, then receives the TOTP provisioning secret once. SuperAdmin never sees the TOTP secret or recovery codes. Enrollment is not complete until the employee confirms the first TOTP code; enrollment completion creates no session. MFA reset invalidates old authenticators/recovery codes and all sessions, and Staff login remains blocked until reenrollment. Recovery codes are stored only as hashes, are single-use, and their use/reset is audited. Staff MFA recovery must not provide an unauthenticated bypass.
 
 ### Access and refresh tokens
 
@@ -68,9 +68,9 @@ Refresh token:
 
 The detailed session/token contract is maintained in [SESSION-TOKEN-DESIGN.md](SESSION-TOKEN-DESIGN.md). Initial approved policy: Customer sessions have a 30-day absolute and 7-day idle lifetime; Staff sessions have a 12-hour absolute and 30-minute idle lifetime. Absolute expiry never slides; idle expiry extends only after successful refresh. Refresh replay is strict: presenting a valid consumed token again revokes its owning session and active successor; no grace period is allowed. A token-ID match with a wrong secret must not revoke a session.
 
-Customers may list only their own sessions, see the current session, revoke other sessions while preserving the current one, or explicitly sign out all devices. Do not display IP addresses or treat IP/User-Agent as authentication factors. Staff revocation of another staff member's session requires a dedicated security-administration permission and an audit event.
+Customers and Staff may list only their own sessions, see the current session, revoke other sessions while preserving the current one, or call DELETE /api/v1/auth/sessions to idempotently revoke all of their sessions including current. The all-session endpoint requires CSRF and exact Origin validation and clears current-browser auth cookies. Do not display IP addresses or treat IP/User-Agent as authentication factors. Staff revocation of another staff member's session requires a dedicated security-administration permission and an audit event.
 
-Staff password success creates only a short-lived MFA transaction, never a normal session. The pre-authentication credential uses the dedicated `__Host-staff-mfa` cookie (maximum five minutes) and grants only completion/cancellation of that transaction. A normal staff session is created only after TOTP or a single-use recovery code succeeds.
+Staff password success creates only a short-lived MFA transaction, never a normal session. The pre-authentication credential uses the dedicated `__Host-staff-mfa` cookie (maximum five minutes) and grants only completion/cancellation of that transaction. A separate `__Host-staff-enrollment` cookie grants only a maximum 10-minute enrollment ceremony and never a session. A normal staff session is created only after TOTP or a single-use recovery code succeeds. Five failed MFA submissions in a rolling 15-minute account window cause a 15-minute temporary authentication lockout across devices/transactions; this does not change the admin-controlled IsActive flag.
 
 ## Authorization
 
@@ -82,7 +82,7 @@ Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, Suppo
 
 Customer SMS OTP is purpose-bound to Customer login for this slice, tied to one normalized verified phone/account and one challenge. Generate six-digit values with a cryptographically secure RNG. Challenge lifetime defaults to two minutes; resend cooldown defaults to 60 seconds; maximum failed verification attempts defaults to five. New challenges invalidate prior active challenges for the same purpose according to an atomic database rule.
 
-A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state; never persist or log raw codes. Verification, attempt increments and single-use consumption must be atomic in PostgreSQL.
+A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state in the challenge record; never persist OTP in plaintext or log it. To support asynchronous delivery, a PostgreSQL transactional outbox may temporarily hold the destination/message only as authenticated Data Protection ciphertext; clear that payload immediately on terminal delivery or expiry, and purge terminal metadata after 24 hours. The worker must never send after the challenge's two-minute expiry or after resend invalidation. Verification, attempt increments, quota consumption and outbox insertion must be atomic in PostgreSQL.
 
 ### Initial configurable quotas
 
@@ -100,8 +100,8 @@ These are starting values to tune against actual traffic and provider constraint
 - ASP.NET Core rate limiting for coarse per-IP/network limits. It is not a substitute for edge DDoS protection.
 - Shared atomic PostgreSQL quotas for per-phone and global SMS budgets so multiple API instances cannot bypass them. Do not rely solely on per-process in-memory counters.
 - CAPTCHA/proof-of-human challenges when risk thresholds are crossed, as an additional control rather than the primary limiter.
-- Provider circuit breaker, bounded concurrency, strict spend ceiling and no unbounded retries.
-- Progressive throttling instead of permanent account lockout that can be weaponized.
+- PostgreSQL transactional outbox with expiry-aware worker; ordered primary and secondary SMS providers; failover on provider/network/timeout/429/5xx/circuit-open failures; provider-specific circuit breakers; at most three attempts per message with bounded backoff; stable challenge/idempotency key where supported; strict spend ceiling and no unbounded retries.
+- Progressive throttling for public/customer login paths to reduce account-lockout denial of service. Staff MFA has the separately approved rule: the fifth failed factor submission within 15 minutes triggers a 15-minute temporary auth lock, applied only after the correct Staff password has been proven and counted atomically across transactions/devices.
 - Alerts for IP/phone fan-out, failure spikes, unusual send rates and provider spend.
 - Redis may be added later if measured traffic requires distributed rate limiting; define behavior during Redis outage before adoption.
 
