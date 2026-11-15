@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Ecommerce.IntegrationTests.Identity;
 
+[Collection("Identity database")]
 public sealed class IdentityPersistenceTests : IClassFixture<ApiFactory>
 {
     private const string InitialMigrationId = "20261114104352_InitialIdentitySchema";
