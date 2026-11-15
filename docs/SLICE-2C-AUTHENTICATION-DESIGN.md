@@ -158,8 +158,8 @@ For Customer OTP and Staff MFA completion, the following state changes MUST comm
 2. For Staff TOTP, atomically advance the authenticator's last accepted time-step; for recovery, atomically consume the selected recovery code.
 3. Consume the OTP challenge or Staff MFA transaction.
 4. Revalidate account enabled state, expected AccountType and current authorization state.
-5. Insert exactly one AuthSession.
-6. Insert exactly one initial opaque 256-bit RefreshToken, persisting only SHA-256(secret).
+5. For Customer OTP and Staff MFA where `MustChangePassword=false`, insert exactly one AuthSession.
+6. For those completed-session flows, insert exactly one initial opaque 256-bit RefreshToken, persisting only SHA-256(secret). For Staff MFA where `MustChangePassword=true`, instead insert only a hashed, single-use, maximum-10-minute password-change transaction; do not insert AuthSession or RefreshToken.
 
 No one-time factor may be consumed without its terminal authentication state being committed. For a Staff account with `MustChangePassword=false`, MFA factor consumption, MFA transaction consumption, AuthSession and initial RefreshToken commit together. For `MustChangePassword=true`, factor/MFA transaction consumption and insertion of a hashed, single-use, maximum-10-minute password-change transaction commit together, with no AuthSession or RefreshToken. The subsequent password-change request atomically consumes that restricted transaction, updates the Identity password, clears `MustChangePassword`, inserts AuthSession and initial RefreshToken, and signs the access JWT before commit. A failed operation rolls back all corresponding state. Password-based Customer session creation uses the same session/refresh transaction but has no one-time challenge to consume.
 
