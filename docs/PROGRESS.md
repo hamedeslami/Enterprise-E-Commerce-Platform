@@ -59,17 +59,18 @@
 - Slice 2A complete and merged in PR #8: explicit `AccountType` (`Customer` / `Staff`) persisted independently of roles, with application validation and a PostgreSQL check constraint. Migration intentionally fails if existing users require classification; no implicit backfill is permitted.
 - Slice 2B complete and merged in PR #9: UUIDv7 `AuthSession` and `RefreshToken` persistence, database constraints, partial unique index for one active refresh token per session, and PostgreSQL transaction-based atomic rotation. Rotation uses session-first/token-second locking, constant-time secret verification, database time, conditional token consumption and atomic successor insertion. Valid consumed-token replay revokes only its owning session; wrong-secret attempts do not revoke.
 - PostgreSQL integration coverage includes successful rotation, wrong-secret non-revocation, strict replay revocation, concurrent same-token refresh, active-token uniqueness and session expiry boundaries.
-- Slice 2C design is documented separately. It defines Customer email/mobile password login, verified-mobile OTP, Staff password + mandatory TOTP/recovery, identifier normalization/uniqueness, session creation and endpoint contracts.
-- No authentication endpoints, JWT issuance, login cookies, OTP challenge persistence, Staff MFA transaction, TOTP or recovery-code implementation has been added yet.
+- Slice 2C design is documented separately. It defines Customer email/mobile password login, verified-mobile OTP, SuperAdmin-only Staff provisioning/password management, employee MFA enrollment/reset, Staff password + mandatory TOTP/recovery, account-level MFA lockout, identifier normalization/uniqueness, session creation, all-session revocation and transactional SMS outbox/provider failover.
+- No authentication endpoints, JWT issuance, login cookies, OTP challenge persistence/outbox worker, Staff MFA enrollment/transaction, TOTP or recovery-code implementation has been added yet. PR #10 remains documentation-only.
 
 ## Phase 2 scope
 
 - Identity module and its own DbContext/schema/migrations.
 - Customer email/mobile password login and verified-mobile SMS OTP sign-in.
-- Staff username/password plus mandatory TOTP MFA and single-use recovery codes.
+- Staff accounts are provisioned only by SuperAdmin, who sets/resets passwords; employees complete a one-time MFA enrollment invitation and then use username/password + mandatory TOTP or single-use recovery code. Five failed MFA attempts in 15 minutes trigger a 15-minute temporary lockout.
 - JWT access + opaque refresh cookies, rotation, reuse detection and session revocation.
 - CSRF, Origin, CORS, secure cookies and staff/customer authorization policies.
-- OTP challenge lifecycle, per-phone/IP/global quotas, provider circuit breaker and abuse telemetry.
+- OTP challenge lifecycle, per-phone/IP/global quotas, PostgreSQL transactional outbox, primary/secondary provider failover, bounded retries, expiry cleanup, provider circuit breakers and abuse telemetry.
+- Actor-generic session management including DELETE /sessions sign-out-all for Customer and Staff.
 - Security-focused unit/integration tests.
 
 See [Phase 2 Identity and Security](PHASE-2-IDENTITY-SECURITY.md), [Session and Token Lifecycle Design](SESSION-TOKEN-DESIGN.md), and [Slice 2C Authentication Ceremony Design](SLICE-2C-AUTHENTICATION-DESIGN.md) for the detailed contracts and exit criteria. All deferred decisions and production gates are tracked in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md).
