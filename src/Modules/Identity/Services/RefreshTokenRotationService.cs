@@ -99,9 +99,10 @@ public sealed class RefreshTokenRotationService(IdentityDbContext dbContext)
         if (token.ExpiresAt <= now)
             return new(RefreshTokenRotationStatus.TokenExpired);
 
-        var newIdleExpiresAt = now.Add(idleWindow);
-        if (newIdleExpiresAt > session.AbsoluteExpiresAt)
-            newIdleExpiresAt = session.AbsoluteExpiresAt;
+        var remainingAbsoluteLifetime = session.AbsoluteExpiresAt - now;
+        var newIdleExpiresAt = idleWindow >= remainingAbsoluteLifetime
+            ? session.AbsoluteExpiresAt
+            : now.Add(idleWindow);
 
         var successorSecret = RandomNumberGenerator.GetBytes(SecretLengthBytes);
         var successor = new RefreshToken(

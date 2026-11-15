@@ -16,6 +16,10 @@ public sealed class AuthSession
         string? deviceLabel = null,
         byte[]? userAgentHash = null)
     {
+        authenticatedAt = authenticatedAt.ToUniversalTime();
+        absoluteExpiresAt = absoluteExpiresAt.ToUniversalTime();
+        idleExpiresAt = idleExpiresAt.ToUniversalTime();
+
         if (userId == Guid.Empty)
             throw new ArgumentException("A session must belong to a persisted user.", nameof(userId));
         if (actorKind is not (AccountType.Customer or AccountType.Staff))

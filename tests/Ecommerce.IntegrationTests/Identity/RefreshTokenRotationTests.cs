@@ -116,6 +116,45 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
         Assert.NotNull(successor.RevokedAt);
     }
 
+
+    [Fact]
+    public async Task RotateAsync_ConsumedTokenReplayIsDetectedAfterOriginalTokenExpiry()
+    {
+        var seed = await CreateSessionAsync();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var service = new RefreshTokenRotationService(
+                scope.ServiceProvider.GetRequiredService<IdentityDbContext>());
+            var rotation = await service.RotateAsync(seed.TokenId, seed.Secret, TimeSpan.FromDays(7));
+            Assert.Equal(RefreshTokenRotationStatus.Rotated, rotation.Status);
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE identity."RefreshTokens"
+                SET "ExpiresAt" = clock_timestamp() - interval '1 minute'
+                WHERE "Id" = {seed.TokenId}
+                """);
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var service = new RefreshTokenRotationService(
+                scope.ServiceProvider.GetRequiredService<IdentityDbContext>());
+            var replay = await service.RotateAsync(seed.TokenId, seed.Secret, TimeSpan.FromDays(7));
+            Assert.Equal(RefreshTokenRotationStatus.ReplayDetected, replay.Status);
+        }
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var session = await verifyDb.AuthSessions.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == seed.SessionId);
+        Assert.NotNull(session.RevokedAt);
+    }
+
     [Fact]
     public async Task RotateAsync_ConcurrentSameTokenRequestsCannotCreateTwoSuccessors()
     {

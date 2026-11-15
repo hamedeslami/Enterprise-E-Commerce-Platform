@@ -12,6 +12,9 @@ public sealed class RefreshToken
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt)
     {
+        createdAt = createdAt.ToUniversalTime();
+        expiresAt = expiresAt.ToUniversalTime();
+
         if (sessionId == Guid.Empty)
             throw new ArgumentException("A refresh token must belong to a session.", nameof(sessionId));
         if (secretHash is not { Length: 32 })
