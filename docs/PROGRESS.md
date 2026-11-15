@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** PRs #6 (Identity persistence), #7 (session/token security design), #8 (explicit AccountType) and #9 (session/refresh persistence) are merged. Slice 2C authentication ceremony design is under review on `phase-2/slice-2c-authentication-design`; no authentication endpoint or login flow implementation has started.
+**Status:** PRs #6 (Identity persistence), #7 (session/token security design), #8 (explicit AccountType), #9 (session/refresh persistence) and #10 (Slice 2C authentication ceremony design) are merged into `main`. Slice 2C is design-complete; authentication implementation has not started.
 
 ## Repository
 
@@ -12,7 +12,7 @@
 - Phase 2 session/token design: [PR #7](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/7), merged.
 - Explicit account classification: [PR #8](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/8), merged.
 - Session and refresh persistence: [PR #9](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/9), merged.
-- Current design branch: `phase-2/slice-2c-authentication-design`; design-only changes, not merged.
+- Slice 2C authentication ceremony design: [PR #10](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/10), merged 2026-11-15 (merge commit `ceae3be363a524693aece54d0844455cc2c36648`).
 
 ## Decisions confirmed
 
@@ -95,6 +95,8 @@ The authoritative register, including closure gates and required evidence, is [T
 Complete Phase 2 implementation and verification, report exact CI/build/test results, update docs, and wait for explicit approval before Phase 3. Do not claim production security certification from passing tests alone.
 
 
-## Slice 2C design review status
+## Slice 2C design status
 
-PR #10 is open and remains a documentation-only draft on phase-2/slice-2c-authentication-design. The seven findings from the first design review and four gaps from the second review have been addressed in the revised Slice 2C contract and synchronized across SECURITY, Phase 2, Roadmap and Technical Debt. A fresh review of the latest head and explicit owner approval are still pending. No authentication endpoint or login-flow implementation has started.
+PR #10, [Slice 2C authentication ceremony design](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/10), was merged into `main` on 2026-11-15 (merge commit `ceae3be363a524693aece54d0844455cc2c36648`). The design contract is approved and documented across this progress file, `SLICE-2C-AUTHENTICATION-DESIGN.md`, `SECURITY.md`, `PHASE-2-IDENTITY-SECURITY.md`, `ROADMAP.md` and `TECHNICAL-DEBT.md`.
+
+This merge is documentation-only. No authentication endpoints, login flows, JWT issuance, auth-cookie handling, OTP challenge persistence/outbox worker, Staff MFA enrollment/transactions, TOTP or recovery-code implementation has been added. Implementation must proceed through a separately scoped and explicitly approved implementation PR/phase.
