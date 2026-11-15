@@ -14,30 +14,24 @@ Use ASP.NET Core Identity for password hashing, account lifecycle and supported 
 
 ### Customer sign-in
 
-Customer password sign-in accepts one identifier plus password; the identifier is either email or mobile number. The server normalizes and classifies it; the client cannot choose an account type or query mode.
+Customer password sign-in accepts one `identifier` plus `password`; the identifier is either email or mobile number. The server normalizes and classifies it; the client cannot choose an account type or query mode.
 
-- Email + password is accepted only when EmailConfirmed is true.
-- Mobile + password is accepted only when PhoneNumberConfirmed is true.
+- Email + password is accepted only when `EmailConfirmed == true`.
+- Mobile + password is accepted only when `PhoneNumberConfirmed == true`.
 - SMS OTP is available only for an existing Customer account with a previously verified mobile number.
 - OTP login never creates an account. Registration and verification remain explicit flows.
 - Customer authentication endpoints must reject Staff accounts, even if a contact identifier matches.
 - Public responses must not reveal whether an identifier exists, is unverified, belongs to Staff, is locked, or has an incorrect password.
 
-Customer email is normalized using ASP.NET Core Identity normalization; do not apply provider-specific dot/plus-tag rewriting. Iranian mobile inputs are normalized to canonical E.164 (+989xxxxxxxxx); accept only documented input forms and reject ambiguous values. PostgreSQL must enforce uniqueness for normalized Customer email and canonical Customer mobile. Application pre-checks are not authoritative. Staff usernames remain unique through Identity's normalized-username constraint. Customer username is not a login identifier; if Identity requires one, use a server-generated internal value that Customer login endpoints never accept.
-
-The exact Customer-only partial-index predicates, NULL/empty handling, migration preflight and AccountType conversion behavior are defined in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md). Preserve the global unique normalized-username index.
+Customer email is normalized using ASP.NET Core Identity normalization; do not apply provider-specific dot/plus-tag rewriting. Iranian mobile inputs are normalized to canonical E.164 (`+989xxxxxxxxx`); accept only documented input forms and reject ambiguous values. PostgreSQL must enforce uniqueness for normalized Customer email and canonical Customer mobile. Application pre-checks are not authoritative. Staff usernames remain unique through Identity's normalized-username constraint. Customer username is not a login identifier; if Identity requires one, use a server-generated internal value that Customer login endpoints never accept.
 
 ### Staff sign-in and MFA
 
-All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. A single-use recovery code is the controlled recovery alternative. Do not permit SMS OTP as a Staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited.
+All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. A single-use recovery code is the controlled recovery alternative. Do not permit SMS OTP as a staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited.
 
-Password success creates only a short-lived, purpose-bound MFA transaction and the dedicated __Host-staff-mfa cookie (maximum five minutes). It MUST NOT create a normal session, access JWT or refresh token. Issue normal session credentials only after TOTP or a single-use recovery code succeeds.
+Password success creates only a short-lived, purpose-bound MFA transaction and the dedicated `__Host-staff-mfa` cookie (maximum five minutes). It MUST NOT create a normal session, access JWT or refresh token. Issue normal session credentials only after TOTP or a single-use recovery code succeeds.
 
-TOTP uses the documented RFC 6238 profile: HMAC-SHA-1, six digits, 30-second period, T0=0 and at most ±1 step. Persist and atomically advance LastAcceptedTimeStep per authenticator; reject any matching step that is not greater than the previously accepted step. Concurrent duplicate submissions must have at most one winner. TOTP secrets are encrypted at rest. Enrollment requires confirmation of a generated code before MFA becomes active.
-
-Recovery codes contain at least 128 bits of CSPRNG entropy, are displayed once, normalized using the documented encoding rules, and stored only as domain-separated SHA-256 hashes bound to the owning user. Consumption is atomic with MFA transaction consumption and session creation. Recovery verification must not reveal whether a code exists. Recovery/reset and Staff session revocation are audited.
-
-The exact transaction, rollback, concurrency and lost-response requirements are defined in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md).
+TOTP secrets are encrypted at rest. Enrollment requires confirmation of a generated code before MFA becomes active. Enforce a small explicit clock-skew window and prevent accepted TOTP time-step replay, including concurrent submissions. Recovery codes are stored only as hashes, are single-use, and their use/reset is audited. Staff MFA recovery must not provide an unauthenticated bypass.
 
 ### Access and refresh tokens
 
@@ -62,25 +56,21 @@ Refresh token:
 
 ## Cookies, CSRF and CORS
 
-- Production cookie names are exactly __Host-access-token, __Host-refresh-token and __Host-staff-mfa.
-- Production cookies are issued by api.shop.com as host-only cookies with Secure, HttpOnly, SameSite=Lax and Path=/. Never set Domain. The __Host- prefix is used only with Secure, Path=/ and no Domain.
-- Access and refresh are separate cookies with explicit expiry no later than their credentials.
-- Local HTTP Development uses separate dev-access-token, dev-refresh-token and dev-staff-mfa names. Secure=false is allowed only for the Development environment and local HTTP origin. Staging/Production must reject Development cookie configuration and must never emit dev-prefixed or insecure cookies.
-- Cookie deletion uses the same name, Path and host-only scope as issuance, with an expired value/Max-Age=0.
-- Successful Customer login and successful Staff MFA set access/refresh cookies and clear any stale Staff MFA cookie. Staff password success sets only the MFA cookie. Failed login does not clear an unrelated existing session. Terminal MFA transaction failure/expiry clears the MFA cookie. Refresh failure for invalid/expired/revoked/replayed credentials clears access and refresh. Logout clears all three cookies.
-- Production topology is https://shop.com, https://panel.shop.com and https://api.shop.com; both frontends call the API cross-origin with credentials, while all three hosts are same-site under HTTPS.
+- HttpOnly=true; Secure=true in production; explicit Path and expiry.
+- Production topology is `https://shop.com`, `https://panel.shop.com`, and `https://api.shop.com`; both frontends call the API cross-origin with credentials, while all three hosts are same-site under HTTPS.
+- Issue authentication cookies from `api.shop.com` as host-only cookies: omit `Domain`; use `Secure`, `HttpOnly`, `Path=/`, and explicit `SameSite=Lax`. Prefer `__Host-` names where their requirements are met.
 - SameSite and CORS do not replace CSRF protection: sibling subdomains are same-site. Every unsafe cookie-authenticated request requires both ASP.NET Core antiforgery validation and exact Origin validation.
-- CORS allows exactly https://shop.com and https://panel.shop.com with credentials; never use wildcard or arbitrary Origin reflection.
+- CORS allows exactly `https://shop.com` and `https://panel.shop.com` with credentials; never use wildcard or arbitrary Origin reflection.
 - Missing Origin, untrusted Origin, missing/invalid antiforgery token are rejected. Do not use Referer as a fallback.
-- Browser clients send credentials and keep the antiforgery request token in memory; send it in X-CSRF-TOKEN. Bootstrap endpoint: GET /api/v1/security/csrf-token, with Cache-Control: no-store.
+- Browser clients send credentials and keep the antiforgery request token in memory; send it in `X-CSRF-TOKEN`. Bootstrap endpoint: `GET /api/v1/security/csrf-token`, with `Cache-Control: no-store`.
 
 ## Session lifecycle and browser session management
 
 The detailed session/token contract is maintained in [SESSION-TOKEN-DESIGN.md](SESSION-TOKEN-DESIGN.md). Initial approved policy: Customer sessions have a 30-day absolute and 7-day idle lifetime; Staff sessions have a 12-hour absolute and 30-minute idle lifetime. Absolute expiry never slides; idle expiry extends only after successful refresh. Refresh replay is strict: presenting a valid consumed token again revokes its owning session and active successor; no grace period is allowed. A token-ID match with a wrong secret must not revoke a session.
 
-Both Customer and Staff actors may list only their own sessions and revoke their own non-current sessions. The current session is identified in the response and cannot be revoked through the single-session endpoint. Sign-out-all explicitly revokes all sessions including current. Staff revocation of another Staff member's session requires a dedicated SecurityAdmin permission, target ownership validation, completed MFA and an audit event. Session-management endpoint details are in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md).
+Customers may list only their own sessions, see the current session, revoke other sessions while preserving the current one, or explicitly sign out all devices. Do not display IP addresses or treat IP/User-Agent as authentication factors. Staff revocation of another staff member's session requires a dedicated security-administration permission and an audit event.
 
-Do not display IP addresses or treat IP/User-Agent as authentication factors. Staff password success creates only a short-lived MFA transaction, never a normal session. The pre-authentication credential grants only completion/cancellation of that transaction. A normal Staff session is created only after TOTP or a single-use recovery code succeeds.
+Staff password success creates only a short-lived MFA transaction, never a normal session. The pre-authentication credential uses the dedicated `__Host-staff-mfa` cookie (maximum five minutes) and grants only completion/cancellation of that transaction. A normal staff session is created only after TOTP or a single-use recovery code succeeds.
 
 ## Authorization
 
@@ -92,7 +82,7 @@ Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, Suppo
 
 Customer SMS OTP is purpose-bound to Customer login for this slice, tied to one normalized verified phone/account and one challenge. Generate six-digit values with a cryptographically secure RNG. Challenge lifetime defaults to two minutes; resend cooldown defaults to 60 seconds; maximum failed verification attempts defaults to five. New challenges invalidate prior active challenges for the same purpose according to an atomic database rule.
 
-A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state; never persist or log raw codes. Verification, attempt increments and single-use consumption must be atomic in PostgreSQL. Successful OTP consumption, AuthSession insertion and initial RefreshToken insertion commit or roll back together.
+A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state; never persist or log raw codes. Verification, attempt increments and single-use consumption must be atomic in PostgreSQL.
 
 ### Initial configurable quotas
 
@@ -140,7 +130,7 @@ Never store PAN/CVV. Delegate sensitive entry to compliant hosted/tokenized gate
 
 Production must use a persistent Data Protection key ring shared by all API instances that need to unprotect the same payloads, with one explicit stable ApplicationName and isolated key rings for Development, Staging and Production. Protect key-ring material at rest using an independently managed certificate or KMS-backed mechanism; restrict access to the API workload and authorized operators. Define protected backup, restore, rotation and compromise-recovery procedures and rehearse restoration. Production startup must fail closed if persistent shared storage or at-rest protection is missing or invalid; no ephemeral/container-local fallback is allowed in production. Local development may use a developer-local key ring or isolated Docker volume.
 
-The storage/encryption provider is intentionally not selected until hosting is known. This is tracked as TD-SEC-001 in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md), with a mandatory gate before production deployment or enabling protected production data. JWT signing-key custody, OTP HMAC secret provisioning, SMS provider, production origins/TLS, WAF/trusted proxy, distributed rate limiting, backup/DR and privacy retention are also tracked there. The register is authoritative and must be reviewed at the start and end of every phase.
+The storage/encryption provider is intentionally not selected until hosting is known. This is tracked as **TD-SEC-001** in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md), with a mandatory gate before production deployment or enabling protected production data. JWT signing-key custody, OTP HMAC secret provisioning, SMS provider, production origins/TLS, WAF/trusted proxy, distributed rate limiting, backup/DR and privacy retention are also tracked there. The register is authoritative and must be reviewed at the start and end of every phase.
 
 ## Data and operations
 
@@ -167,3 +157,16 @@ Minimize PII and define retention, deletion/export and backup retention for targ
 ## Security release gate
 
 Before production: threat-model review, dependency/container/secrets scanning, auth/CSRF/authorization/IDOR tests, concurrency tests, webhook verification, upload tests, config review, backup/restore exercise and independent security review. Track findings with severity, owner and remediation evidence. Presence of controls alone is not proof of security.
+
+
+## Slice 2C authentication design clarifications
+
+The implementation-ready details for this slice are maintained in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md). The following decisions are mandatory for implementation and refine the general policies above:
+
+- TOTP profile: RFC 6238, HMAC-SHA-1, six digits, 30-second step, T0=0 and a fixed ±1 step acceptance window. Persist LastAcceptedTimeStep per authenticator and advance it atomically; reject any step not greater than the last accepted step.
+- OTP/MFA/recovery consumption, AuthSession insertion and initial RefreshToken insertion must commit or roll back in one PostgreSQL transaction. JWT signing must complete before commit; a signing failure rolls back the transaction. Add rollback and concurrent duplicate-submission tests.
+- Customer uniqueness uses PostgreSQL partial unique indexes on identity.AspNetUsers NormalizedEmail and PhoneNumber where AccountType=1 and the indexed value is not NULL. Preserve the global unique normalized-username index. Empty identifiers are rejected/normalized to NULL; canonical Iranian phone format is enforced by a database check. AccountType conversion and session revocation are one privileged audited transaction.
+- Both Customer and Staff can list their own sessions and revoke their own non-current sessions. Staff-to-Staff revocation requires a dedicated SecurityAdmin permission, target ownership validation, completed MFA and audit.
+- Recovery codes contain at least 128 bits of CSPRNG entropy, are displayed once in unpadded Base32, and are stored only as domain-separated SHA-256 hashes. Verification responses must not reveal code existence.
+- A committed session whose cookies are lost in transit is unreachable and expires no later than its initial idle/absolute expiry; cleanup revokes expired sessions. Strict refresh replay remains unchanged.
+- Production cookie names are __Host-access-token, __Host-refresh-token and __Host-staff-mfa, with Secure, HttpOnly, SameSite=Lax, Path=/ and no Domain. Development uses separate dev-prefixed names only on local HTTP; production never falls back to insecure cookies. Cookie clearing follows the issuance scope and credential lifecycle.
