@@ -23,6 +23,56 @@ namespace Ecommerce.Modules.Identity.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Ecommerce.Modules.Identity.Domain.AuthSession", b =>
+                {
+                    b.Property<Guid>("Id").HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("AbsoluteExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("AuthenticatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<int>("ActorKind").HasColumnType("integer");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("DeviceLabel").HasMaxLength(128).HasColumnType("character varying(128)");
+                    b.Property<DateTimeOffset>("IdleExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("LastSeenAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("RevocationReason").HasMaxLength(64).HasColumnType("character varying(64)");
+                    b.Property<DateTimeOffset?>("RevokedAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.Property<byte[]>("UserAgentHash").HasColumnType("bytea");
+                    b.Property<int>("AuthenticationMethod").HasColumnType("integer");
+                    b.HasKey("Id");
+                    b.HasIndex("UserId", "CreatedAt").HasDatabaseName("IX_AuthSessions_UserId_CreatedAt");
+                    b.ToTable("AuthSessions", "identity", t =>
+                    {
+                        t.HasCheckConstraint("CK_AuthSessions_ActorKind", "\"ActorKind\" IN (1, 2)");
+                        t.HasCheckConstraint("CK_AuthSessions_AuthenticationMethod", "\"AuthenticationMethod\" IN (1, 2, 3, 4)");
+                        t.HasCheckConstraint("CK_AuthSessions_Lifetime", "\"CreatedAt\" < \"AbsoluteExpiresAt\" AND \"CreatedAt\" < \"IdleExpiresAt\" AND \"IdleExpiresAt\" <= \"AbsoluteExpiresAt\"");
+                        t.HasCheckConstraint("CK_AuthSessions_UserAgentHash", "\"UserAgentHash\" IS NULL OR octet_length(\"UserAgentHash\") = 32");
+                    });
+                });
+
+            modelBuilder.Entity("Ecommerce.Modules.Identity.Domain.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id").HasColumnType("uuid");
+                    b.Property<DateTimeOffset?>("ConsumedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid?>("ReplacedByTokenId").HasColumnType("uuid");
+                    b.Property<DateTimeOffset?>("RevokedAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("SessionId").HasColumnType("uuid");
+                    b.Property<byte[]>("SecretHash").IsRequired().HasColumnType("bytea");
+                    b.HasKey("Id");
+                    b.HasIndex("SecretHash").IsUnique().HasDatabaseName("IX_RefreshTokens_SecretHash");
+                    b.HasIndex("SessionId").HasDatabaseName("IX_RefreshTokens_SessionId");
+                    b.HasIndex("SessionId").IsUnique().HasDatabaseName("UX_RefreshTokens_OneActivePerSession")
+                        .HasFilter("\"ConsumedAt\" IS NULL AND \"RevokedAt\" IS NULL");
+                    b.ToTable("RefreshTokens", "identity", t =>
+                    {
+                        t.HasCheckConstraint("CK_RefreshTokens_HashLength", "octet_length(\"SecretHash\") = 32");
+                        t.HasCheckConstraint("CK_RefreshTokens_Lifetime", "\"CreatedAt\" < \"ExpiresAt\"");
+                        t.HasCheckConstraint("CK_RefreshTokens_Replacement", "(\"ConsumedAt\" IS NULL AND \"ReplacedByTokenId\" IS NULL) OR (\"ConsumedAt\" IS NOT NULL AND \"ReplacedByTokenId\" IS NOT NULL)");
+                        t.HasCheckConstraint("CK_RefreshTokens_NotSelfReplacing", "\"ReplacedByTokenId\" IS NULL OR \"ReplacedByTokenId\" <> \"Id\"");
+                    });
+                });
+
             modelBuilder.Entity("Ecommerce.Modules.Identity.Domain.ApplicationRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -114,6 +164,26 @@ namespace Ecommerce.Modules.Identity.Persistence.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", "identity", t => t.HasCheckConstraint("CK_AspNetUsers_AccountType", "\"AccountType\" IN (1, 2)"));
+                });
+
+            modelBuilder.Entity("Ecommerce.Modules.Identity.Domain.AuthSession", b =>
+                {
+                    b.HasOne("Ecommerce.Modules.Identity.Domain.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ecommerce.Modules.Identity.Domain.RefreshToken", b =>
+                {
+                    b.HasOne("Ecommerce.Modules.Identity.Domain.AuthSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
