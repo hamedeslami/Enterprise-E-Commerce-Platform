@@ -101,7 +101,7 @@ Also configure IP/network request limits, per-device/session signals where avail
 
 ## Authorization
 
-Initial roles: SuperAdmin, Admin, StoreManager, SupportAgent, Customer. Roles are coarse groupings; endpoint policies enforce explicit permissions and resource context. Deny by default. Never trust role, user ID, ownership or authentication assurance supplied by the client. Staff-only endpoints require staff permissions and a completed MFA session. Customer endpoints enforce ownership. Seed roles idempotently; never seed a predictable production admin password. Initial staff bootstrap must use a controlled, one-time process and force credential setup.
+Initial roles: SuperAdmin, Admin, StoreManager, SupportAgent, Customer. Roles are coarse groupings; ASP.NET Core authorization policies map endpoint access requirements to server-issued role claims in the access JWT and enforce resource ownership/context. The initial model does not perform an Identity database lookup on every authorized request. Deny by default. Never trust role, permission, user ID, ownership or authentication assurance supplied by the client. Staff-only endpoints require the appropriate staff role/policy and a completed MFA session. Customer endpoints enforce ownership. Seed roles idempotently; never seed a predictable production admin password. Initial staff bootstrap must use a controlled, one-time process and force credential setup.
 
 ## Initial API surface (contracts to be finalized with implementation)
 
