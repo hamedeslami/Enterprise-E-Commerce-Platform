@@ -131,7 +131,7 @@ OTP verification accepts mobileNumber and code. The server resolves the canonica
 
 ### Staff password and MFA
 
-Staff login accepts username and password. Success creates a single-use MFA transaction and sets only the dedicated MFA cookie. It does not authenticate the browser or issue normal session credentials.
+Staff login accepts username and password only when the account is enabled, MFA enrollment is Active and no MFA lockout is in effect. Success creates a single-use MFA transaction and sets only the dedicated MFA cookie. An account in EnrollmentPending must use the SuperAdmin-issued enrollment invitation instead; it cannot obtain an MFA transaction or normal session. Staff login does not authenticate the browser or issue normal session credentials.
 
 MFA verification accepts either a TOTP code or a recovery code. The server resolves the pending transaction from the dedicated cookie; never accept client-supplied user ID or transaction owner. Validate purpose, expiry, cancellation/consumption state and transaction/account-level failure budgets. If the Staff account is not MFA-enrolled or is temporarily MFA-locked, reject without creating a session.
 
