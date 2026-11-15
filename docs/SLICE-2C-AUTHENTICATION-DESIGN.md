@@ -198,8 +198,9 @@ If a future implementation changes algorithm/digits/period, it is a new reviewed
 - Transaction is bound to one Staff user and one fixed purpose.
 - It can only complete/cancel that transaction; it cannot be upgraded without successful MFA.
 - A transaction permits at most five failed factor submissions. The fifth failure consumes the transaction and clears its cookie.
-- Across all transactions/devices, maintain a database-backed rolling 15-minute Staff MFA failure counter. The fifth failed MFA verification in that window sets a 15-minute authentication lockout (MfaLockoutEnd); this is a temporary auth lock, not a change to the administrator-controlled account IsActive flag. Invalidate all pending MFA transactions and reject further Staff password/MFA authentication while locked.
-- A successful MFA completion resets the failure window/counter. When lockout expires, the counter/window resets automatically. An explicit SuperAdmin unlock, if later implemented, must be separately permissioned and audited.
+- Across all transactions/devices, maintain a database-backed rolling 15-minute Staff MFA failure counter. The fifth failed MFA verification in that window sets a 15-minute authentication lockout (MfaLockoutEnd); this is a temporary auth lock, not a change to the administrator-controlled account IsActive flag. Atomically invalidate all pending MFA transactions, revoke all active Staff sessions and refresh credentials, and reject new Staff password/MFA and refresh operations while locked. Already-issued stateless access JWTs may remain valid for at most their remaining five-minute lifetime plus configured clock skew, consistent with AR-SEC-001.
+- A successful MFA completion resets the failure window/counter. When lockout expires, the counter/window resets automatically.
+- The fifth-failure lockout, pending-transaction invalidation and active session/refresh revocation commit atomically in PostgreSQL; emit a security audit event. Existing access JWT residual validity remains bounded by AR-SEC-001. An explicit SuperAdmin unlock, if later implemented, must be separately permissioned and audited.
 - Failure counting and lockout transition are atomic under concurrent verification; opening a new MFA transaction does not reset the account-level counter.
 - Password success does not reset or bypass MFA attempt policy.
 
@@ -329,7 +330,7 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 - Staff enrollment invitation is single-use, hash-only at rest, time-bounded, requires the administrator-provided password, and cannot create a session.
 - TOTP secret is returned only once to the employee, never to SuperAdmin; first valid code activates MFA and recovery codes are displayed once.
 - MFA reset invalidates old authenticators/recovery codes and all sessions before reenrollment; Staff cannot log in while enrollment is pending.
-- Five failed MFA submissions in a rolling 15-minute account window trigger a 15-minute lockout across new transactions/devices; concurrency cannot exceed the threshold.
+- Five failed MFA submissions in a rolling 15-minute account window trigger a 15-minute lockout across new transactions/devices; the transition atomically revokes active sessions/refresh credentials, invalidates pending MFA transactions and is audited. Already-issued JWT residual validity is bounded by AR-SEC-001; concurrency cannot exceed the threshold.
 - Staff password reset revokes active sessions and pending MFA transactions without silently bypassing or resetting TOTP.
 
 ### Session, cookie, browser and authorization
