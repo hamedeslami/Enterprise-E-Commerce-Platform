@@ -86,6 +86,7 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
     public async Task RotateAsync_ConsumedTokenReplayRevokesOnlyItsSessionAndActiveSuccessor()
     {
         var seed = await CreateSessionAsync();
+        var unrelatedSession = await CreateSessionAsync(seed.UserId);
         Guid successorId;
 
         using (var scope = _factory.Services.CreateScope())
@@ -112,9 +113,13 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
         var successor = await db.RefreshTokens.AsNoTracking()
             .SingleAsync(candidate => candidate.Id == successorId);
 
+        var otherSession = await db.AuthSessions.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == unrelatedSession.SessionId);
+
         Assert.NotNull(session.RevokedAt);
         Assert.Equal("RefreshTokenReplay", session.RevocationReason);
         Assert.NotNull(successor.RevokedAt);
+        Assert.Null(otherSession.RevokedAt);
     }
 
 
@@ -238,19 +243,27 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
         Assert.Single(tokens, token => token.Id != seed.TokenId);
     }
 
-    private async Task<SeededSession> CreateSessionAsync()
+    private async Task<SeededSession> CreateSessionAsync(Guid? existingUserId = null)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         await db.Database.MigrateAsync();
 
-        var user = new ApplicationUser
+        ApplicationUser user;
+        if (existingUserId is Guid userId)
         {
-            UserName = $"refresh-{Guid.NewGuid():N}",
-            AccountType = AccountType.Customer
-        };
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
+            user = await db.Users.SingleAsync(candidate => candidate.Id == userId);
+        }
+        else
+        {
+            user = new ApplicationUser
+            {
+                UserName = $"refresh-{Guid.NewGuid():N}",
+                AccountType = AccountType.Customer
+            };
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+        }
 
         var now = DateTimeOffset.UtcNow;
         var session = new AuthSession(
@@ -275,8 +288,8 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
         Assert.Equal('7', session.Id.ToString("N")[12]);
         Assert.Equal('7', token.Id.ToString("N")[12]);
 
-        return new SeededSession(session.Id, token.Id, secret);
+        return new SeededSession(user.Id, session.Id, token.Id, secret);
     }
 
-    private sealed record SeededSession(Guid SessionId, Guid TokenId, byte[] Secret);
+    private sealed record SeededSession(Guid UserId, Guid SessionId, Guid TokenId, byte[] Secret);
 }
