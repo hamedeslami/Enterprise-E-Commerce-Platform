@@ -58,7 +58,7 @@ Refresh token:
 
 - HttpOnly=true; Secure=true in production; explicit Path and expiry.
 - Production topology is `https://shop.com`, `https://panel.shop.com`, and `https://api.shop.com`; both frontends call the API cross-origin with credentials, while all three hosts are same-site under HTTPS.
-- Issue authentication cookies from `api.shop.com` as host-only cookies: omit `Domain`; use `Secure`, `HttpOnly`, `Path=/`, and explicit `SameSite=Lax`. Prefer `__Host-` names where their requirements are met.
+- Issue authentication cookies from `api.shop.com` as host-only cookies: omit `Domain`; use `Secure`, `HttpOnly`, `Path=/`, and explicit `SameSite=Lax`. Prefer `__Host-` names where their requirements are met. The Staff enrollment transaction uses a separate `__Host-staff-enrollment` cookie (maximum 10 minutes) that grants enrollment only, never an authenticated session.
 - SameSite and CORS do not replace CSRF protection: sibling subdomains are same-site. Every unsafe cookie-authenticated request requires both ASP.NET Core antiforgery validation and exact Origin validation.
 - CORS allows exactly `https://shop.com` and `https://panel.shop.com` with credentials; never use wildcard or arbitrary Origin reflection.
 - Missing Origin, untrusted Origin, missing/invalid antiforgery token are rejected. Do not use Referer as a fallback.
@@ -83,6 +83,16 @@ Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, Suppo
 Customer SMS OTP is purpose-bound to Customer login for this slice, tied to one normalized verified phone/account and one challenge. Generate six-digit values with a cryptographically secure RNG. Challenge lifetime defaults to two minutes; resend cooldown defaults to 60 seconds; maximum failed verification attempts defaults to five. New challenges invalidate prior active challenges for the same purpose according to an atomic database rule.
 
 A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state in the challenge record; never persist OTP in plaintext or log it. To support asynchronous delivery, a PostgreSQL transactional outbox may temporarily hold the destination/message only as authenticated Data Protection ciphertext; clear that payload immediately on terminal delivery or expiry, and purge terminal metadata after 24 hours. The worker must never send after the challenge's two-minute expiry or after resend invalidation. Verification, attempt increments, quota consumption and outbox insertion must be atomic in PostgreSQL.
+
+### SMS transactional outbox and provider failover
+
+Use a PostgreSQL transactional outbox for SMS OTP delivery. Challenge creation, quota consumption and outbox insertion commit together. The Identity-owned worker claims work with database leases/row locking, checks database time immediately before sending, and never sends an expired, consumed or resend-invalidated challenge. The outbox TTL is the same as the OTP challenge TTL (initially two minutes).
+
+The challenge table stores only the HMAC. The outbox may temporarily store the destination and message only as authenticated Data Protection ciphertext, never plaintext. The worker decrypts only in memory; encrypted payload is erased immediately after delivery reaches a terminal state or expiry, and terminal metadata is purged after 24 hours. Production key-ring controls are covered by TD-SEC-001.
+
+Configure primary and secondary provider adapters in priority order. Fail over on provider/network unavailability, timeout, 429, 5xx, circuit-open and provider configuration/authentication failure; alert on configuration failures. Permanent message-level rejection is terminal. Use provider-specific circuit breakers, at most three total attempts per message and bounded backoff (initially 2s then 5s). Reuse the same challenge/code for retries; pass the stable challenge ID as idempotency key where supported. An ambiguous timeout may produce duplicate delivery, but duplicates carry the same OTP and do not extend expiry. OTP verification may succeed while delivery status is pending/unknown; it must not depend on a provider delivery receipt. Do not extend challenge TTL to wait for a provider. A definite permanent rejection invalidates the challenge; exhausted transient/ambiguous attempts leave it valid only until its original expiry. Expired queue work is purged and never sent.
+
+The API returns a generic accepted response after the outbox transaction commits, not a claim of successful delivery. Provider failover does not bypass phone/IP/global quotas, concurrency limits or spend budgets. Redis or a broker is not required for the initial implementation; reconsider only with measured need.
 
 ### Initial configurable quotas
 
@@ -156,7 +166,7 @@ Minimize PII and define retention, deletion/export and backup retention for targ
 
 ## Security release gate
 
-Before production: threat-model review, dependency/container/secrets scanning, auth/CSRF/authorization/IDOR tests, concurrency tests, webhook verification, upload tests, config review, backup/restore exercise and independent security review. Track findings with severity, owner and remediation evidence. Presence of controls alone is not proof of security.
+Before production: threat-model review, dependency/container/secrets scanning, auth/CSRF/authorization/IDOR tests, concurrency tests (including MFA lockout and all-session revocation), OTP outbox/provider failover/expiry tests, webhook verification, upload tests, config review, backup/restore exercise and independent security review. Track findings with severity, owner and remediation evidence. Presence of controls alone is not proof of security.
 
 
 ## Slice 2C authentication design clarifications
