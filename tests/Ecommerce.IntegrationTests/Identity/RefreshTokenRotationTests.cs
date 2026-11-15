@@ -4,6 +4,7 @@ using Ecommerce.Modules.Identity.Persistence;
 using Ecommerce.Modules.Identity.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Ecommerce.IntegrationTests.Identity;
@@ -116,6 +117,49 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
         Assert.NotNull(successor.RevokedAt);
     }
 
+
+
+    [Fact]
+    public async Task DatabaseIndex_RejectsSecondActiveRefreshTokenForSameSession()
+    {
+        var seed = await CreateSessionAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+
+        var now = DateTimeOffset.UtcNow;
+        db.RefreshTokens.Add(new RefreshToken(
+            seed.SessionId,
+            RandomNumberGenerator.GetBytes(32),
+            now,
+            now.AddHours(1)));
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        var postgresException = Assert.IsType<PostgresException>(exception.InnerException);
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, postgresException.SqlState);
+    }
+
+    [Fact]
+    public async Task RotateAsync_SuccessorExpiryNeverExceedsAbsoluteSessionExpiry()
+    {
+        var seed = await CreateSessionAsync();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var service = new RefreshTokenRotationService(
+                scope.ServiceProvider.GetRequiredService<IdentityDbContext>());
+            var result = await service.RotateAsync(seed.TokenId, seed.Secret, TimeSpan.FromDays(60));
+            Assert.Equal(RefreshTokenRotationStatus.Rotated, result.Status);
+        }
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var db = verifyScope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var session = await db.AuthSessions.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == seed.SessionId);
+        var successor = await db.RefreshTokens.AsNoTracking()
+            .SingleAsync(token => token.SessionId == seed.SessionId && token.ConsumedAt == null && token.RevokedAt == null);
+
+        Assert.Equal(session.AbsoluteExpiresAt, session.IdleExpiresAt);
+        Assert.Equal(session.AbsoluteExpiresAt, successor.ExpiresAt);
+    }
 
     [Fact]
     public async Task RotateAsync_ConsumedTokenReplayIsDetectedAfterOriginalTokenExpiry()
