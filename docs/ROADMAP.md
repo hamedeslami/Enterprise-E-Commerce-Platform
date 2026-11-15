@@ -22,7 +22,7 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 
 - Customer password login using either email or mobile number; the selected identifier must be verified (`EmailConfirmed` or `PhoneNumberConfirmed`).
 - Customer SMS OTP login only to an existing, previously verified mobile number; OTP never creates an account.
-- Staff accounts are created and managed only by SuperAdmin, who sets/resets temporary passwords. Employees complete a one-time MFA enrollment invitation and then authenticate using username/password + mandatory TOTP or a single-use recovery code. After MFA, they must change the temporary password before receiving a normal session. Password success alone never creates a normal session; the fifth failed MFA submission in 15 minutes causes a 15-minute temporary lockout.
+- Staff accounts are created and managed only by SuperAdmin, who sets/resets temporary passwords. Employees complete a one-time MFA enrollment invitation and then authenticate using username/password + mandatory TOTP or a single-use recovery code. After MFA, they must change the temporary password before receiving a normal session; the server persists MustChangePassword and backfills existing Staff accounts to require rotation. Password success alone never creates a normal session; the fifth failed MFA submission in 15 minutes causes a 15-minute temporary lockout.
 - Server-enforced Customer/Staff account separation on every authentication path.
 - Customer identifier normalization and PostgreSQL-enforced uniqueness for normalized email and canonical mobile; Staff username uniqueness.
 - Shared session creation, JWT access issuance and initial opaque refresh-token persistence after a completed ceremony.
