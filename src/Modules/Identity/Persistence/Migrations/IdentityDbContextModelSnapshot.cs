@@ -113,7 +113,7 @@ namespace Ecommerce.Modules.Identity.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
-                    b.ToTable("AspNetUsers", "identity", t => t.HasCheckConstraint("CK_AspNetUsers_AccountType", "\\\"AccountType\\\" IN (1, 2)"));
+                    b.ToTable("AspNetUsers", "identity", t => t.HasCheckConstraint("CK_AspNetUsers_AccountType", "\"AccountType\" IN (1, 2)"));
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
