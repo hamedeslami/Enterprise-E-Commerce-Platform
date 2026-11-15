@@ -51,11 +51,11 @@ Do not issue a normal access/refresh session after the password step alone. Use 
 
 - Use ASP.NET Core Identity for password hashing, normalized usernames, account lifecycle and supported lockout primitives.
 - Issue a short-lived signed JWT access token and an opaque, cryptographically random refresh token in separate HttpOnly cookies. Never return token values in JSON or place them in browser storage/URLs/logs.
-- Store only a cryptographic hash of each refresh token. Rotate on every successful refresh; detect reuse of a consumed token and revoke the affected token family/session.
+- Store only a cryptographic hash of each refresh token. Rotate on every successful refresh in one PostgreSQL transaction. Strict replay policy: a matching-secret consumed-token replay revokes its owning session and active token family, with no grace period; a token-ID match with the wrong secret must not revoke the session.
 - Bind sessions to user and authentication method/assurance level. Logout revokes the current refresh session. Provide audited staff session revocation.
-- Access token target lifetime: configurable 5–10 minutes. Refresh lifetime and absolute/idle session limits must be configurable and documented before production.
+- Access JWT lifetime: 5 minutes maximum; server configuration may lower but must not raise it without a separately reviewed security decision. Customer sessions default to 30-day absolute / 7-day idle lifetime; Staff sessions default to 12-hour absolute / 30-minute idle lifetime. These session limits are configurable server-side; absolute expiry never slides and idle expiry extends only after successful refresh.
 - A revoked refresh session does not instantly invalidate an already-issued stateless access JWT; the accepted residual window is bounded by access-token expiry unless a later persisted revocation check is deliberately added.
-- Enforce CSRF and trusted Origin checks for cookie-authenticated unsafe requests, including refresh/logout and other state-changing auth operations.
+- Enforce ASP.NET Core antiforgery cookie + JSON request-token validation and independent exact-Origin validation for every unsafe cookie-authenticated request. The request token is bootstrapped through `GET /api/v1/security/csrf-token`, returned with `Cache-Control: no-store`, retained in frontend memory only and sent in `X-CSRF-TOKEN`.
 
 ## SMS OTP design
 
@@ -134,7 +134,7 @@ Use UUIDv7 for application-generated entity IDs. Verify that Identity entity/rol
 - Staff password-only login cannot obtain a normal session; valid TOTP and recovery code can; recovery code is single-use.
 - TOTP enrollment requires confirmation; secret is encrypted at rest; staff recovery/reset is audited.
 - Refresh rotation, concurrent refresh, consumed-token reuse detection, logout and session revocation.
-- Cookie flags, CSRF token, hostile/missing Origin, CORS allow-list and cross-site topology tests.
+- Cookie flags, CSRF token, hostile/missing Origin, exact CORS allow-list and cross-origin/same-site browser topology tests.
 - Role/permission matrix, horizontal/vertical escalation and IDOR tests.
 - Rate-limit behavior behind configured trusted proxies.
 - Release build, unit tests and PostgreSQL-backed integration tests pass in CI.
@@ -142,7 +142,7 @@ Use UUIDv7 for application-generated entity IDs. Verify that Identity entity/rol
 ## Deferred choices
 
 - Specific Iranian SMS provider and its delivery/template/API contract (SMS channel itself is confirmed).
-- Exact production frontend/API origin topology and cookie SameSite/Domain settings.
+- Production browser topology is decided: `https://shop.com`, `https://panel.shop.com` and `https://api.shop.com`. Remaining work is deployment-specific TLS/certificate termination, exact deployed-origin configuration, host-only cookie verification and trusted-proxy/forwarded-header configuration.
 - Edge/WAF/CDN product and production rate-limit thresholds.
 - Whether to add Redis after measured need.
 - Passkeys/WebAuthn; not part of this phase's initial implementation.
