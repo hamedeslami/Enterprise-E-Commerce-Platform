@@ -43,9 +43,11 @@ These delivered foundations do not mean that authentication endpoints, access JW
 
 ### Staff
 
-- Staff login requires username/password followed by mandatory TOTP.
-- A single-use recovery code is the controlled recovery alternative.
-- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials.
+- Staff accounts are created only by SuperAdmin; self-registration is prohibited. SuperAdmin sets initial passwords and may reset them through audited privileged operations.
+- Staff login requires username/password followed by mandatory TOTP; a single-use recovery code is the controlled alternative.
+- SuperAdmin issues a one-time MFA enrollment invitation; the employee redeems it with their credentials, receives the TOTP setup secret directly, confirms the first code, and receives recovery codes once. SuperAdmin never sees the authenticator secret/recovery codes.
+- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials. Staff cannot log in before MFA enrollment is complete.
+- The fifth failed MFA submission within a rolling 15-minute account window causes a 15-minute temporary authentication lockout across transactions/devices.
 - SMS OTP is not a Staff factor.
 - Staff endpoints reject Customer accounts.
 
@@ -68,16 +70,17 @@ Identifier normalization, database uniqueness, endpoint contracts, session creat
 - Six-digit cryptographically random code; two-minute expiry; 60-second resend cooldown; five failed attempts per challenge.
 - Five sends per normalized phone per rolling hour and ten per rolling 24 hours.
 - HMAC-SHA-256 with a dedicated external secret; challenge ID and purpose included in MAC input.
-- Challenge creation, resend invalidation, attempts and consumption must be atomic in PostgreSQL.
-- Shared per-phone/global quotas, IP/network limits, risk-based CAPTCHA, provider circuit breaker, bounded concurrency and spend ceiling.
+- Challenge creation, resend invalidation, attempts, quota consumption and transactional outbox insertion must be atomic in PostgreSQL.
+- PostgreSQL SMS outbox uses protected short-lived payloads, primary/secondary provider failover, provider-specific circuit breakers, bounded retries/backoff, challenge-aligned expiry and cleanup.
+- Shared per-phone/global quotas, IP/network limits, risk-based CAPTCHA, bounded concurrency and spend ceiling.
 
 ## Implementation sequence
 
 1. Slice 2C design — document and approve contracts before code.
 2. Shared session creation and token issuance foundation.
-3. Customer email/mobile password and verified-mobile OTP flows.
-4. Staff password pre-authentication, TOTP and recovery.
-5. Cookie/CSRF/Origin/CORS integration, authorization and session-management endpoints.
+3. Customer email/mobile password and verified-mobile OTP flows, including PostgreSQL outbox and provider failover.
+4. SuperAdmin Staff provisioning/password management and employee MFA enrollment/reset; Staff password pre-authentication, TOTP, account lockout and recovery.
+5. Cookie/CSRF/Origin/CORS integration, authorization and Customer/Staff session-management endpoints including sign-out-all.
 6. Security review, concurrency verification and CI.
 
 Each slice is separately reviewable. Do not proceed to the next slice until the current slice's tests and review are complete and the owner approves proceeding. No PR is merged without explicit owner approval.
@@ -86,8 +89,9 @@ Each slice is separately reviewable. Do not proceed to the next slice until the 
 
 - Identifier normalization, Customer-only database uniqueness and account-type separation.
 - Verified email/mobile password login; verified-mobile OTP login and anti-enumeration.
-- OTP purpose, expiry, resend invalidation, single use, attempts, quotas and concurrency.
-- Staff password-only denial, TOTP/recovery success, replay prevention, single-use recovery and audit.
+- OTP purpose, expiry, resend invalidation, single use, attempts, quotas, transactional outbox, provider failover/retry, expiry cleanup and concurrency.
+- Staff provisioning authorization, password reset session revocation, invitation redemption, TOTP enrollment confirmation, recovery-code one-time display, MFA replay prevention, fifth-failure/15-minute lockout and audit.
+- DELETE /sessions idempotently revokes all Customer/Staff sessions including current and clears current browser cookies.
 - Session creation, lifetime bounds, hash-only refresh persistence and refresh replay/concurrency.
 - Cookie flags, CSRF, hostile/missing Origin, exact CORS, role matrix and IDOR.
 - Release build, unit tests and PostgreSQL-backed integration tests pass in CI.
