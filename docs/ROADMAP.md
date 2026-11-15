@@ -22,7 +22,7 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 
 - Customer password login using either email or mobile number; the selected identifier must be verified (`EmailConfirmed` or `PhoneNumberConfirmed`).
 - Customer SMS OTP login only to an existing, previously verified mobile number; OTP never creates an account.
-- Staff login using username/password followed by mandatory TOTP; a single-use recovery code is the controlled recovery alternative. Password success alone never creates a normal session.
+- Staff accounts are created and managed only by SuperAdmin, who sets/resets passwords. Employees complete a one-time MFA enrollment invitation and then authenticate using username/password + mandatory TOTP or a single-use recovery code. Password success alone never creates a normal session; the fifth failed MFA submission in 15 minutes causes a 15-minute temporary lockout.
 - Server-enforced Customer/Staff account separation on every authentication path.
 - Customer identifier normalization and PostgreSQL-enforced uniqueness for normalized email and canonical mobile; Staff username uniqueness.
 - Shared session creation, JWT access issuance and initial opaque refresh-token persistence after a completed ceremony.
@@ -30,7 +30,9 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 - CSRF, trusted Origin, exact CORS allow-list, secure cookie policy and security headers.
 - Initial roles/permissions and staff/customer resource authorization.
 - OTP challenge lifecycle, HMAC storage, purpose binding, expiry, single-use and atomic attempt handling.
-- Per-phone, IP/network and global SMS quotas; edge/WAF controls, risk-based CAPTCHA, provider circuit breaker and spend budget.
+- PostgreSQL transactional SMS outbox with protected short-lived payload, primary/secondary provider failover, bounded retries, challenge-aligned TTL and cleanup.
+- Per-phone, IP/network and global SMS quotas; edge/WAF controls, risk-based CAPTCHA, provider circuit breakers and spend budget.
+- Actor-generic Customer/Staff session management, including idempotent sign-out-all endpoint DELETE /sessions.
 - Auditing and security-focused tests.
 
 **Exit:** auth, MFA, OTP, CSRF, replay, quota concurrency, role, IDOR, cookie and session tests pass; no unresolved critical/high security findings. This does not replace an independent production security review.
