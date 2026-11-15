@@ -342,6 +342,11 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 - MFA reset invalidates old authenticators/recovery codes and all sessions before reenrollment; Staff cannot log in while enrollment is pending.
 - Five failed MFA submissions in a rolling 15-minute account window trigger a 15-minute lockout across new transactions/devices; the transition atomically revokes active sessions/refresh credentials, invalidates pending MFA transactions and is audited. Already-issued JWT residual validity is bounded by AR-SEC-001; concurrency cannot exceed the threshold.
 - Staff password reset sets `MustChangePassword=true`, revokes active sessions and pending MFA transactions without silently bypassing or resetting TOTP.
+- SuperAdmin Staff creation and every password reset persist `MustChangePassword=true`; existing Staff rows are backfilled to true by migration and Customer rows to false.
+- After successful MFA with `MustChangePassword=true`, only the restricted password-change cookie is issued; no AuthSession, access JWT or refresh token exists.
+- The restricted cookie cannot access business APIs, session-management routes or refresh; it is single-use, expires within 10 minutes and is cleared on all terminal outcomes.
+- The password-change endpoint rejects reuse of the temporary password, enforces Identity password policy, and atomically consumes the restricted transaction, updates the password, clears the flag and creates the session/initial refresh token.
+- Forced failures at each password-change transaction step roll back the password/flag/session changes together; concurrent submissions produce at most one successful session.
 - Staff with `MustChangePassword=true` can complete password + MFA but cannot obtain a normal session until the temporary password is changed.
 - The post-MFA password-change credential permits only the password-change endpoint and expires within 10 minutes; password update, flag clear, session and initial refresh insertion are atomic.
 
