@@ -1,5 +1,6 @@
 using Ecommerce.Modules.Identity.Domain;
 using Ecommerce.Modules.Identity.Persistence;
+using Ecommerce.Modules.Identity.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,8 @@ public static class DependencyInjection
             .AddRoles<ApplicationRole>()
             .AddEntityFrameworkStores<IdentityDbContext>()
             .AddDefaultTokenProviders();
+
+        services.AddScoped<RefreshTokenRotationService>();
 
         return services;
     }

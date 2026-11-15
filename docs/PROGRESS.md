@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 2 Identity persistence and session/token lifecycle design are merged (PRs #6 and #7). Implementation is underway. This branch adds explicit Customer/Staff account classification; no authentication endpoints or token/session persistence have been implemented yet. CI run #147 passed both `build-and-test` and `compose-smoke-test` on the earlier PR #7 head `624cf95c630a855ece591d3d2ddf11ede0eff18d`. After the final refresh-replay design corrections, the latest PR #7 head `881a41fd5bb65dc1ed26def062c0af0ebae71198` also passed both checks (`build-and-test` and `compose-smoke-test`; GitHub Actions runs #43686457891 and #43686455765).
+**Status:** PRs #6 (Identity persistence), #7 (session/token security design) and #8 (explicit AccountType) are merged. Slice 2B is in progress on `phase-2/session-refresh-persistence`. Code commit `2b7f19d0af216e1e0bbf7e080ffb30a2b24cf95f` passed CI run #184 (`build-and-test` and `compose-smoke-test`). The latest branch head also includes a documentation synchronization commit.
 
 ## Repository
 
@@ -9,7 +9,9 @@
 - Phase 1 foundation and CI verification are merged into `main`.
 - Phase 1 final PR: [PR #5](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/5), merged 2026-11-14.
 - Phase 2 Identity persistence branch: `phase-2/identity-security` (PR #6 merged into `main`).
-- Current Phase 2 design branch: `phase-2/session-token-design` (PR #7 is open Draft and unmerged).
+- Phase 2 session/token design: PR #7 merged into `main`.
+- Explicit account classification: PR #8 merged into `main`.
+- Current implementation branch: `phase-2/session-refresh-persistence` (Slice 2B; not merged).
 
 ## Decisions confirmed
 
@@ -51,7 +53,9 @@
 
 ## Phase 2 implementation progress
 
-- In progress on `phase-2/account-type-foundation`: explicit `AccountType` (`Customer` / `Staff`) persisted independently of roles, with application validation and a PostgreSQL check constraint. Migration intentionally fails if existing users require classification; no implicit backfill is permitted.
+- Slice 2A complete and merged in PR #8: explicit `AccountType` (`Customer` / `Staff`) persisted independently of roles, with application validation and a PostgreSQL check constraint. Migration intentionally fails if existing users require classification; no implicit backfill is permitted.
+- Slice 2B implementation on `phase-2/session-refresh-persistence`: added UUIDv7 `AuthSession` and `RefreshToken` persistence, database constraints for session lifetimes/hash length/token-chain state, a partial unique index enforcing at most one active refresh token per session, and a PostgreSQL transaction-based rotation service. Rotation locks the session before the token, verifies the secret in constant time before and after locking, uses database time, consumes the old token conditionally, and commits session activity plus exactly one successor atomically. A valid consumed-token replay revokes only its owning session and active token; a token-ID match with the wrong secret does not revoke anything.
+- Added PostgreSQL integration coverage for successful rotation, wrong-secret non-revocation, strict replay revocation and concurrent same-token refresh attempts. No HTTP authentication endpoints, JWT issuance or cookie handling are included in this slice.
 
 - Added the `Ecommerce.Modules.Identity` project and registered it in the API host.
 - Added a module-owned `IdentityDbContext` mapped to PostgreSQL schema `identity`.
@@ -62,9 +66,9 @@
 - Generated the initial EF migration, Designer and ModelSnapshot using GitHub Actions (no local .NET installation required) and committed them to the Phase 2 branch.
 - Added an integration test that applies the migration to the CI PostgreSQL database and verifies the migration history and users table.
 - Added Data Protection registration; production requires a persistent, protected shared key ring.
-- PR #7 documents session/token lifecycle, strict refresh replay, account separation, JWT claim authorization, RSA signing-key lifecycle, customer/staff session policy, cookie/CSRF/Origin contracts, and production Data Protection deployment requirements. It remains design-only and unmerged.
+- PR #7 merged the approved session/token lifecycle, strict refresh replay, account separation, JWT claim authorization, RSA signing-key lifecycle, customer/staff session policy, cookie/CSRF/Origin contracts, and production Data Protection deployment requirements. Its approved design is being implemented incrementally.
 - Identity persistence slice 1 is implemented and verified: the PostgreSQL migration integration test and the complete CI pipeline passed on the latest Phase 2 commit.
-- No authentication endpoints have been implemented yet; customer login/OTP, staff MFA, sessions/tokens, cookies, CSRF and authorization remain subsequent implementation work.
+- No authentication endpoints have been implemented yet. Customer login/OTP, staff MFA, JWT issuance, cookies, CSRF and endpoint authorization remain subsequent implementation work. Session/refresh persistence and the database-critical rotation service are the current implementation slice.
 
 ## Phase 2 scope
 

@@ -18,7 +18,7 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 
 ## Phase 2 — Identity and security
 
-**Status:** Phase 2 is in progress. Identity persistence foundation (PR #6) and session/token lifecycle and browser-security design (PR #7) are merged. Implementation begins with explicit Customer/Staff account classification.
+**Status:** Phase 2 is in progress. Identity persistence foundation (PR #6), approved session/token lifecycle and browser-security design (PR #7), and explicit Customer/Staff account classification (PR #8) are merged. Slice 2A is complete; Slice 2B implements session/refresh persistence and atomic rotation before HTTP authentication endpoints.
 
 - Customer login with username/password or SMS OTP to a previously verified mobile number.
 - Staff login with username/password plus mandatory TOTP MFA; no SMS OTP for staff MFA.

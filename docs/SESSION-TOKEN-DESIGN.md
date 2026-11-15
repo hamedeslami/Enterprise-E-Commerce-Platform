@@ -1,6 +1,6 @@
 # Session and Token Lifecycle Design
 
-**Status:** Proposed — design only. No authentication endpoints or token persistence have been implemented by this document. This design must be reviewed before implementation.
+**Status:** Approved design baseline. PR #7 merged the approved lifecycle/security decisions. Slice 2B is implementing the persistence model and database-critical refresh rotation; HTTP endpoints, JWT issuance and cookie integration remain out of scope for this slice.
 
 ## 1. Scope and non-goals
 
