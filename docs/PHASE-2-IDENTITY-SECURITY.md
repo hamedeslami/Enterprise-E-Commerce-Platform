@@ -43,10 +43,10 @@ These delivered foundations do not mean that authentication endpoints, access JW
 
 ### Staff
 
-- Staff accounts are created only by SuperAdmin; self-registration is prohibited. SuperAdmin sets initial passwords and may reset them through audited privileged operations. Both are temporary credentials and set a server-controlled `MustChangePassword` flag.
+- Staff accounts are created only by SuperAdmin; self-registration is prohibited. SuperAdmin sets initial passwords and may reset them through audited privileged operations. Both are temporary credentials and set a server-controlled, non-null `MustChangePassword` flag; its migration backfills existing Staff to true and Customers to false.
 - Staff login requires username/password followed by mandatory TOTP; a single-use recovery code is the controlled alternative.
 - SuperAdmin issues a one-time MFA enrollment invitation; the employee redeems it with their credentials, receives the TOTP setup secret directly, confirms the first code, and receives recovery codes once. SuperAdmin never sees the authenticator secret/recovery codes.
-- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials. Staff cannot log in before MFA enrollment is complete. After successful MFA, a Staff member with `MustChangePassword=true` receives only a restricted 10-minute password-change credential; no normal session is issued until password change succeeds.
+- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials. Staff cannot log in before MFA enrollment is complete. After successful MFA, a Staff member with `MustChangePassword=true` receives only a restricted 10-minute password-change credential; no normal session is issued until password change succeeds. The password update, flag clear, restricted-credential consumption, session and initial refresh insertion are atomic.
 - The fifth failed MFA submission within a rolling 15-minute account window causes a 15-minute temporary authentication lockout across transactions/devices.
 - SMS OTP is not a Staff factor.
 - Staff endpoints reject Customer accounts.
@@ -90,7 +90,7 @@ Each slice is separately reviewable. Do not proceed to the next slice until the 
 - Identifier normalization, Customer-only database uniqueness and account-type separation.
 - Verified email/mobile password login; verified-mobile OTP login and anti-enumeration.
 - OTP purpose, expiry, resend invalidation, single use, attempts, quotas, transactional outbox, provider failover/retry, expiry cleanup and concurrency.
-- Staff provisioning authorization, temporary-password flag on create/reset, mandatory post-MFA password change, restricted password-change credential, atomic password update + flag clear + session creation, password reset session revocation, invitation redemption, TOTP enrollment confirmation, recovery-code one-time display, MFA replay prevention, fifth-failure/15-minute lockout and audit.
+- Staff provisioning authorization, temporary-password flag on create/reset, migration backfill, mandatory post-MFA password change, restricted password-change credential, atomic password update + flag clear + credential consumption + session creation, password reset session revocation, invitation redemption, TOTP enrollment confirmation, recovery-code one-time display, MFA replay prevention, fifth-failure/15-minute lockout and audit.
 - DELETE /sessions idempotently revokes all Customer/Staff sessions including current and clears current browser cookies.
 - Session creation, lifetime bounds, hash-only refresh persistence and refresh replay/concurrency.
 - Cookie flags, CSRF, hostile/missing Origin, exact CORS, role matrix and IDOR.
