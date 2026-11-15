@@ -18,7 +18,7 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 
 ## Phase 2 — Identity and security
 
-**Status:** Phase 2 is in progress. Identity persistence (PR #6), approved session/token and browser-security design (PR #7), explicit Customer/Staff classification (PR #8), and session/refresh persistence with atomic rotation (PR #9) are merged. Slice 2C authentication ceremony design is documented in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md); implementation has not started.
+**Status:** Phase 2 is in progress. Identity persistence (PR #6), approved session/token and browser-security design (PR #7), explicit Customer/Staff classification (PR #8), session/refresh persistence with atomic rotation (PR #9), Slice 2C authentication ceremony design (PR #10) and progress correction (PR #11) are merged. The additional Foundation contract now includes non-null server-controlled `IsActive` account state and the signed JWT `account_type` claim; its documentation review is in progress. Authentication implementation has not started.
 
 - Customer password login using either email or mobile number; the selected identifier must be verified (`EmailConfirmed` or `PhoneNumberConfirmed`).
 - Customer SMS OTP login only to an existing, previously verified mobile number; OTP never creates an account.
