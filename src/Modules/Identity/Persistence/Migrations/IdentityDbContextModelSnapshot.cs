@@ -54,7 +54,10 @@ namespace Ecommerce.Modules.Identity.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("AccountType")\n                        .HasColumnType("integer");\n\n                    b.Property<int>("AccessFailedCount")
+                    b.Property<int>("AccountType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
                     b.Property<string>("ConcurrencyStamp")
