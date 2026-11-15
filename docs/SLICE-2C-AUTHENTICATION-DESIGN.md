@@ -65,7 +65,7 @@ The current Identity model has a non-unique EmailIndex on NormalizedEmail. That 
 - Customer email: unique index on identity.AspNetUsers (NormalizedEmail) with predicate AccountType = 1 AND NormalizedEmail IS NOT NULL.
 - Customer mobile: unique index on identity.AspNetUsers (PhoneNumber) with predicate AccountType = 1 AND PhoneNumber IS NOT NULL.
 
-AccountType value 1 is Customer, as defined by the persisted enum. Empty or whitespace email/mobile values are not valid “absent” values: normalize absence to SQL NULL before persistence. Add these database checks (using the existing identity.AspNetUsers column names): CHECK (NormalizedEmail IS NULL OR (NormalizedEmail <> '' AND NormalizedEmail = btrim(NormalizedEmail))); CHECK (PhoneNumber IS NULL OR PhoneNumber ~ '^\+989[0-9]{9}).
+AccountType value 1 is Customer, as defined by the persisted enum. Empty or whitespace email/mobile values are not valid “absent” values: normalize absence to SQL NULL before persistence. Add these database checks (using the existing identity.AspNetUsers column names): CHECK (NormalizedEmail IS NULL OR (NormalizedEmail <> '' AND NormalizedEmail = btrim(NormalizedEmail))); CHECK (PhoneNumber IS NULL OR PhoneNumber ~ '^\+989[0-9]{9}$').
 
 The unique global normalized-username index remains in force for both account types. Staff contact email/phone may overlap Customer login identifiers because the Customer partial indexes intentionally scope only AccountType = 1.
 
