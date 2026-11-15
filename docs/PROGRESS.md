@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 2 Identity persistence foundation is merged through PR #6. Session/token lifecycle and browser security design are documented on `phase-2/session-token-design` in open Draft PR #7; this design-only PR is not merged. No authentication endpoints or token/session persistence have been implemented yet. The latest CI result for PR #7 must be checked before review.
+**Status:** Phase 2 Identity persistence foundation is merged through PR #6. Session/token lifecycle and browser security design are documented on `phase-2/session-token-design` in open Draft PR #7; this design-only PR is not merged. No authentication endpoints or token/session persistence have been implemented yet. CI run #147 passed both `build-and-test` and `compose-smoke-test` on PR #7 head commit `624cf95c630a855ece591d3d2ddf11ede0eff18d`.
 
 ## Repository
 
@@ -81,7 +81,7 @@ See [Phase 2 Identity and Security](PHASE-2-IDENTITY-SECURITY.md) and [Session a
 The authoritative register, including closure gates and required evidence, is [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). The list below is only a brief status summary and must not be used as a substitute for that register.
 
 - Iranian SMS provider and message template/API contract.
-- Exact production frontend/API origin topology and cookie SameSite/Domain configuration.
+- Production deployment configuration for the already-decided browser topology: TLS/certificate termination, exact deployed origins, cookie attributes and trusted-proxy/forwarded-header settings.
 - Production WAF/CDN/edge provider and thresholds.
 - Whether Redis is justified after measured need.
 - Password/session retention policy and detailed operational alert thresholds.
