@@ -18,17 +18,21 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 
 ## Phase 2 — Identity and security
 
-**Status:** Phase 2 is in progress. Identity persistence foundation (PR #6), approved session/token lifecycle and browser-security design (PR #7), and explicit Customer/Staff account classification (PR #8) are merged. Slice 2A is complete; Slice 2B implements session/refresh persistence and atomic rotation before HTTP authentication endpoints.
+**Status:** Phase 2 is in progress. Identity persistence (PR #6), approved session/token and browser-security design (PR #7), explicit Customer/Staff classification (PR #8), and session/refresh persistence with atomic rotation (PR #9) are merged. Slice 2C authentication ceremony design is documented in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md); implementation has not started.
 
-- Customer login with username/password or SMS OTP to a previously verified mobile number.
-- Staff login with username/password plus mandatory TOTP MFA; no SMS OTP for staff MFA.
-- ASP.NET Core Identity for password/account primitives.
-- Identity-owned DbContext/schema/migrations.
+- Customer password login using either email or mobile number; the selected identifier must be verified (`EmailConfirmed` or `PhoneNumberConfirmed`).
+- Customer SMS OTP login only to an existing, previously verified mobile number; OTP never creates an account.
+- Staff accounts are created and managed only by SuperAdmin, who sets/resets temporary passwords. Employees complete a one-time MFA enrollment invitation and then authenticate using username/password + mandatory TOTP or a single-use recovery code. After MFA, they must change the temporary password before receiving a normal session; the server persists MustChangePassword and backfills existing Staff accounts to require rotation. Password success alone never creates a normal session; the fifth failed MFA submission in 15 minutes causes a 15-minute temporary lockout.
+- Server-enforced Customer/Staff account separation on every authentication path.
+- Customer identifier normalization and PostgreSQL-enforced uniqueness for normalized email and canonical mobile; Staff username uniqueness.
+- Shared session creation, JWT access issuance and initial opaque refresh-token persistence after a completed ceremony.
 - JWT access and opaque refresh tokens in separate HttpOnly cookies; refresh rotation, reuse detection and session revocation.
 - CSRF, trusted Origin, exact CORS allow-list, secure cookie policy and security headers.
 - Initial roles/permissions and staff/customer resource authorization.
 - OTP challenge lifecycle, HMAC storage, purpose binding, expiry, single-use and atomic attempt handling.
-- Per-phone, IP/network and global SMS quotas; edge/WAF controls, risk-based CAPTCHA, provider circuit breaker and spend budget.
+- PostgreSQL transactional SMS outbox with protected short-lived payload, primary/secondary provider failover, bounded retries, challenge-aligned TTL and cleanup.
+- Per-phone, IP/network and global SMS quotas; edge/WAF controls, risk-based CAPTCHA, provider circuit breakers and spend budget.
+- Actor-generic Customer/Staff session management, including idempotent sign-out-all endpoint DELETE /sessions.
 - Auditing and security-focused tests.
 
 **Exit:** auth, MFA, OTP, CSRF, replay, quota concurrency, role, IDOR, cookie and session tests pass; no unresolved critical/high security findings. This does not replace an independent production security review.
