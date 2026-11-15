@@ -1,148 +1,98 @@
 # Phase 2 — Identity and Security
 
-**Status:** In progress. Scope and initial security policy are recorded here; implementation must follow the decisions and verification gates below. This is a design/implementation record, not a security certification.
+**Status:** In progress. This is an implementation progress and navigation document, not a security certification. The detailed approved security baseline is in [SECURITY.md](SECURITY.md), the session/token contract is in [SESSION-TOKEN-DESIGN.md](SESSION-TOKEN-DESIGN.md), and the authentication ceremony contract is in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md).
 
 ## Goals
 
-Implement customer and staff identity on the existing API-first Modular Monolith foundation. Use one Identity module and shared session/token infrastructure, but apply different authentication policies to customers and staff. The browser-facing API uses separate HttpOnly access and refresh cookies with CSRF defenses.
+Implement Customer and Staff identity on the API-first Modular Monolith foundation. Use one Identity module and shared session/token infrastructure, with distinct Customer and Staff authentication policies. The browser-facing API uses separate HttpOnly access and refresh cookies with CSRF defenses.
 
+## Delivered foundations
 
-## Identity persistence foundation — implementation slice 1
+### Identity persistence
 
-The first implementation slice now adds the `Ecommerce.Modules.Identity` project and registers it in the API host. It uses ASP.NET Core Identity with a module-owned EF Core context and the dedicated PostgreSQL `identity` schema. User and role constructors generate UUIDv7 identifiers; the context rejects newly added Identity users or roles whose identifiers are not UUIDv7 and maps those keys as application-generated (`ValueGeneratedNever`).
+The Identity module is registered in the API host and uses ASP.NET Core Identity with a module-owned EF Core context and PostgreSQL `identity` schema. User and role constructors generate UUIDv7 identifiers; persistence rejects newly added Identity users or roles whose identifiers are not UUIDv7.
 
-Initial Identity password/lockout defaults are configured centrally in the module:
+Initial Identity password/lockout defaults:
 - Minimum password length: 12.
 - Digit and lowercase required; uppercase and non-alphanumeric are not mandatory.
 - Identity lockout: 5 failed attempts and 15 minutes.
-- Email is not globally required because the initial customer account model is phone-first capable.
+- Identity's global unique normalized-username index remains the Staff username uniqueness boundary. Customer login must not use username as an identifier.
 
-The EF design-time factory and pinned `dotnet-ef` tool are included. Generate the initial migration from the repository root:
+The EF design-time factory, pinned `dotnet-ef` tool, initial migration, Designer and model snapshot are committed. PostgreSQL-backed integration tests apply the migration and verify the schema.
 
-```bash
-dotnet tool restore
-dotnet ef migrations add InitialIdentitySchema \
-  --project src/Modules/Identity/Identity.csproj \
-  --startup-project src/Ecommerce.Api/Ecommerce.Api.csproj \
-  --context IdentityDbContext \
-  --output-dir Persistence/Migrations
-```
+### Account classification
 
-Do not run `database update` against a shared or production database as part of migration generation. Review and commit the generated migration and model snapshot, then verify it against an isolated PostgreSQL database in CI. The initial migration, Designer and model snapshot are committed. The migration has been applied successfully by the PostgreSQL-backed integration test in CI, which verifies the migration history and Identity users table.
+Every persisted user has an explicit, server-controlled `AccountType` of Customer or Staff. It is independent of roles. No implicit default or automatic classification is permitted. PostgreSQL constraints reject invalid/unspecified values.
 
-## Authentication policy
+### Session and refresh persistence
+
+PR #9 adds UUIDv7 `AuthSession` and `RefreshToken` persistence, database constraints, a partial unique index for one active refresh token per session, and PostgreSQL transaction-based atomic rotation. Rotation uses session-first/token-second locking, constant-time secret verification, database time, conditional token consumption and atomic successor insertion. A valid consumed-token replay revokes only its owning session; wrong-secret attempts do not revoke.
+
+These delivered foundations do not mean that authentication endpoints, access JWT issuance, cookies, CSRF integration, OTP challenges or Staff MFA have been implemented.
+
+## Authentication policy — approved
 
 ### Customers
 
-Support two independent sign-in methods:
+- Password login accepts either email or mobile number through one `identifier` field.
+- Email password login requires `EmailConfirmed == true`.
+- Mobile password login requires `PhoneNumberConfirmed == true`.
+- SMS OTP is available only for an existing Customer with a previously verified mobile number.
+- OTP login never creates an account. Registration and verification remain explicit separate flows.
+- Customer endpoints reject Staff accounts.
 
-1. Username + password, with password hashing and account lifecycle handled by ASP.NET Core Identity.
-2. SMS OTP sent by text message to a previously verified mobile number. **The owner explicitly confirmed SMS as the OTP delivery channel on 2026-11-14.**
+### Staff
 
-OTP sign-in must not silently register a new account. Registration and phone verification are explicit flows. A login OTP is bound to the customer, normalized phone number, purpose and one challenge. A phone number that is unknown, unverified or not eligible must not be disclosed through distinguishable API responses.
+- Staff login requires username/password followed by mandatory TOTP.
+- A single-use recovery code is the controlled recovery alternative.
+- Password success creates only a short-lived MFA transaction; it never creates a normal session or access/refresh credentials.
+- SMS OTP is not a Staff factor.
+- Staff endpoints reject Customer accounts.
 
-### Staff (SuperAdmin, Admin, StoreManager, SupportAgent)
+Identifier normalization, database uniqueness, endpoint contracts, session creation, TOTP replay prevention, OTP abuse controls and required tests are specified in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md).
 
-Require username + password followed by TOTP MFA for every staff account. SMS OTP is not an allowed staff second factor or staff-only login path. Each staff member has an individual account; shared staff credentials are prohibited. TOTP enrollment is not active until a first code is verified. Store the TOTP secret encrypted at rest and store recovery codes only as hashes; recovery codes are single-use. Staff MFA reset/recovery must be audited and must not become an unauthenticated bypass.
+## Common session and browser policy
 
-Do not issue a normal access/refresh session after the password step alone. Use a short-lived, purpose-limited MFA transaction state until TOTP or a valid recovery code succeeds. Only then issue the normal session cookies.
+- Access JWT maximum lifetime: five minutes.
+- Refresh credentials are opaque, cryptographically random, stored only as hashes and rotated atomically.
+- Strict refresh replay: a valid consumed-token replay revokes its owning session; no grace period.
+- Customer sessions: 30-day absolute / 7-day idle. Staff sessions: 12-hour absolute / 30-minute idle.
+- Absolute expiry never slides; idle expiry extends only after successful refresh.
+- Access and refresh credentials are separate HttpOnly cookies; never return raw tokens in JSON or place them in browser storage, URLs or logs.
+- Enforce antiforgery request-token validation and independent exact-Origin validation for unsafe cookie-authenticated requests.
+- Browser topology: `https://shop.com`, `https://panel.shop.com`, `https://api.shop.com`; exact credentialed CORS allow-list and host-only API cookies.
 
-### Common session behavior
+## OTP policy
 
-- Use ASP.NET Core Identity for password hashing, normalized usernames, account lifecycle and supported lockout primitives.
-- Issue a short-lived signed JWT access token and an opaque, cryptographically random refresh token in separate HttpOnly cookies. Never return token values in JSON or place them in browser storage/URLs/logs.
-- Store only a cryptographic hash of each refresh token. Rotate on every successful refresh in one PostgreSQL transaction. Strict replay policy: a matching-secret consumed-token replay revokes its owning session and active token family, with no grace period; a token-ID match with the wrong secret must not revoke the session.
-- Bind sessions to user and authentication method/assurance level. Logout revokes the current refresh session. Provide audited staff session revocation.
-- Access JWT lifetime: 5 minutes maximum; server configuration may lower but must not raise it without a separately reviewed security decision. Customer sessions default to 30-day absolute / 7-day idle lifetime; Staff sessions default to 12-hour absolute / 30-minute idle lifetime. These session limits are configurable server-side; absolute expiry never slides and idle expiry extends only after successful refresh.
-- A revoked refresh session does not instantly invalidate an already-issued stateless access JWT; the accepted residual window is bounded by access-token expiry unless a later persisted revocation check is deliberately added.
-- Enforce ASP.NET Core antiforgery cookie + JSON request-token validation and independent exact-Origin validation for every unsafe cookie-authenticated request. The request token is bootstrapped through `GET /api/v1/security/csrf-token`, returned with `Cache-Control: no-store`, retained in frontend memory only and sent in `X-CSRF-TOKEN`.
+- SMS delivery channel is confirmed; the vendor remains provider-independent and unselected.
+- Six-digit cryptographically random code; two-minute expiry; 60-second resend cooldown; five failed attempts per challenge.
+- Five sends per normalized phone per rolling hour and ten per rolling 24 hours.
+- HMAC-SHA-256 with a dedicated external secret; challenge ID and purpose included in MAC input.
+- Challenge creation, resend invalidation, attempts and consumption must be atomic in PostgreSQL.
+- Shared per-phone/global quotas, IP/network limits, risk-based CAPTCHA, provider circuit breaker, bounded concurrency and spend ceiling.
 
-## SMS OTP design
+## Implementation sequence
 
-SMS is the confirmed OTP delivery channel. Delivery remains provider-independent: define a narrow SMS delivery interface and keep provider credentials/configuration outside source control. The specific Iranian SMS vendor is intentionally deferred until the owner selects one.
+1. Slice 2C design — document and approve contracts before code.
+2. Shared session creation and token issuance foundation.
+3. Customer email/mobile password and verified-mobile OTP flows.
+4. Staff password pre-authentication, TOTP and recovery.
+5. Cookie/CSRF/Origin/CORS integration, authorization and session-management endpoints.
+6. Security review, concurrency verification and CI.
 
-### Challenge lifecycle
+Each slice is separately reviewable. Do not proceed to the next slice until the current slice's tests and review are complete and the owner approves proceeding. No PR is merged without explicit owner approval.
 
-1. Apply edge and application abuse controls before creating a challenge or invoking an SMS provider.
-2. Normalize the Iranian mobile number to a canonical E.164 representation.
-3. Generate a six-digit code using a cryptographically secure random generator.
-4. Persist a challenge with user/phone reference, purpose, creation/expiry timestamps, attempt count, resend state and status.
-5. Store an HMAC-SHA-256 of the code using a dedicated server-side secret, including the challenge ID and purpose in the MAC input. Never store the raw OTP. A plain unsalted hash is insufficient for a six-digit code because its search space is trivial.
-6. Deliver the code through the provider adapter. Do not log the code, raw delivery payload or provider credentials.
-7. Verification checks purpose, expiry, attempt budget and MAC using constant-time comparison. Challenge consumption and attempt increments are atomic in PostgreSQL. A challenge is single-use.
-8. A newly issued code invalidates prior active challenges for the same user/phone/purpose according to a documented transaction rule. A code for one purpose cannot be reused for another purpose.
-9. Delivery failures do not expose account existence. Provider failures are observable through redacted operational telemetry and bounded retries; retries must not send duplicate messages unexpectedly.
+## Required verification and Phase 2 exit
 
-### Initial configurable limits
-
-These are conservative starting defaults, not universal constants; keep them configurable and tune from observed traffic and provider constraints.
-
-| Control | Initial default |
-|---|---:|
-| OTP length | 6 digits |
-| Challenge lifetime | 2 minutes |
-| Resend cooldown per phone | 60 seconds |
-| Failed verification attempts per challenge | 5 |
-| Sends per phone | 5 per rolling hour |
-| Sends per phone | 10 per rolling 24 hours |
-
-Also configure IP/network request limits, per-device/session signals where available, global provider throughput and daily spend/message budgets. Apply CAPTCHA or equivalent proof-of-human only when risk thresholds are crossed, not as a substitute for rate limiting.
-
-### Abuse and DDoS defense
-
-- Apply network-edge/WAF/reverse-proxy protection and request-size/connection limits. ASP.NET Core rate limiting alone is not DDoS protection.
-- Use ASP.NET Core endpoint rate limiting for coarse IP/network controls, with correctly configured trusted-proxy handling.
-- Enforce phone/challenge quotas and global SMS budgets through shared, atomic state in PostgreSQL so multiple API instances cannot bypass them.
-- Avoid relying solely on in-memory per-process counters. If measured traffic later justifies Redis/distributed rate limiting, add it with explicit outage/fail-open/fail-closed behavior; Redis is not required for the first implementation.
-- Rate-limit before expensive provider calls and before account lookup where possible. Add global provider circuit breaker, concurrency bound and spend ceiling.
-- Use progressive delays/temporary challenge throttling rather than permanent account lockout that attackers can weaponize to deny service.
-- Return generic request responses that do not reveal whether a phone number is registered. Keep response timing and error behavior as uniform as practical.
-- Alert on unusual IP/phone fan-out, provider spend/throughput, verification failure spikes and global budget exhaustion.
-
-## Authorization
-
-Initial roles: SuperAdmin, Admin, StoreManager, SupportAgent, Customer. Roles are coarse groupings; ASP.NET Core authorization policies map endpoint access requirements to server-issued role claims in the access JWT and enforce resource ownership/context. The initial model does not perform an Identity database lookup on every authorized request. Deny by default. Never trust role, permission, user ID, ownership or authentication assurance supplied by the client. Staff-only endpoints require the appropriate staff role/policy and a completed MFA session. Customer endpoints enforce ownership. Seed roles idempotently; never seed a predictable production admin password. Initial staff bootstrap must use a controlled, one-time process and force credential setup.
-
-## Initial API surface (contracts to be finalized with implementation)
-
-- POST /api/v1/auth/customer/password/login
-- POST /api/v1/auth/customer/otp/request
-- POST /api/v1/auth/customer/otp/verify
-- POST /api/v1/auth/staff/login
-- POST /api/v1/auth/staff/mfa/verify
-- POST /api/v1/auth/refresh
-- POST /api/v1/auth/logout
-- GET /api/v1/auth/sessions
-- DELETE /api/v1/auth/sessions/{sessionId}
-
-Do not expose endpoints before implementation. Request/response DTOs must not contain raw access/refresh tokens. Cookies are set through response headers.
-
-## Persistence and module ownership
-
-Identity is the first persistence-owning module and therefore introduces its own Identity DbContext, schema, EF configurations, design-time factory and initial migration. Do not create a shared commerce DbContext. Identity owns users, roles/permissions, staff TOTP enrollment/recovery material, refresh sessions/token families, OTP challenges and abuse-budget state. Use PostgreSQL constraints/indexes and transactions for single-use/rotation/quota invariants. Migrations are applied as a controlled deployment step, not automatically by every API instance at startup.
-
-Use UUIDv7 for application-generated entity IDs. Verify that Identity entity/role IDs are generated with UUIDv7 rather than silently accepting a different Guid strategy.
-
-## Required tests and exit criteria
-
-- Password hash verification, username normalization, disabled/locked account behavior.
-- Customer password and verified-phone OTP sign-in; unknown/unverified phone response non-enumeration.
-- OTP purpose binding, expiry, resend invalidation, single use, max attempts and concurrent verification.
-- Per-phone rolling quotas and global SMS budget under concurrent requests and multiple application instances.
-- OTP HMAC secret absence from logs/config samples; constant-time comparison path.
-- Provider failure, timeout, circuit-breaker and no-unbounded-retry behavior.
-- Staff password-only login cannot obtain a normal session; valid TOTP and recovery code can; recovery code is single-use.
-- TOTP enrollment requires confirmation; secret is encrypted at rest; staff recovery/reset is audited.
-- Refresh rotation, concurrent refresh, consumed-token reuse detection, logout and session revocation.
-- Cookie flags, CSRF token, hostile/missing Origin, exact CORS allow-list and cross-origin/same-site browser topology tests.
-- Role/permission matrix, horizontal/vertical escalation and IDOR tests.
-- Rate-limit behavior behind configured trusted proxies.
+- Identifier normalization, Customer-only database uniqueness and account-type separation.
+- Verified email/mobile password login; verified-mobile OTP login and anti-enumeration.
+- OTP purpose, expiry, resend invalidation, single use, attempts, quotas and concurrency.
+- Staff password-only denial, TOTP/recovery success, replay prevention, single-use recovery and audit.
+- Session creation, lifetime bounds, hash-only refresh persistence and refresh replay/concurrency.
+- Cookie flags, CSRF, hostile/missing Origin, exact CORS, role matrix and IDOR.
 - Release build, unit tests and PostgreSQL-backed integration tests pass in CI.
+- No unresolved critical/high security findings. This does not replace independent production security review.
 
 ## Deferred choices
 
-- Specific Iranian SMS provider and its delivery/template/API contract (SMS channel itself is confirmed).
-- Production browser topology is decided: `https://shop.com`, `https://panel.shop.com` and `https://api.shop.com`. Remaining work is deployment-specific TLS/certificate termination, exact deployed-origin configuration, host-only cookie verification and trusted-proxy/forwarded-header configuration.
-- Edge/WAF/CDN product and production rate-limit thresholds.
-- Whether to add Redis after measured need.
-- Passkeys/WebAuthn; not part of this phase's initial implementation.
+The authoritative register and closure evidence are in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). Existing production gates include Data Protection key-ring storage/protection, JWT signing-key custody, OTP HMAC secret provisioning/rotation, SMS provider/contract, production TLS/origins/cookies, WAF/trusted proxy, distributed rate-limiting decision, backup/DR and privacy retention. Provider selection alone does not close a gate.
