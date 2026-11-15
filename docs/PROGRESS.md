@@ -1,7 +1,7 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** PRs #6 (Identity persistence), #7 (session/token security design), #8 (explicit AccountType), #9 (session/refresh persistence) and #10 (Slice 2C authentication ceremony design) are merged into `main`. Slice 2C is design-complete; authentication implementation has not started.
+**Status:** PRs #6 (Identity persistence), #7 (session/token security design), #8 (explicit AccountType), #9 (session/refresh persistence), #10 (Slice 2C authentication ceremony design) and #11 (progress correction) are merged into `main`. Slice 2C authentication design is approved; the additional Foundation contract for account activation and the JWT account-type claim is under documentation review. Authentication implementation has not started.
 
 ## Repository
 
@@ -13,6 +13,7 @@
 - Explicit account classification: [PR #8](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/8), merged.
 - Session and refresh persistence: [PR #9](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/9), merged.
 - Slice 2C authentication ceremony design: [PR #10](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/10), merged 2026-11-15 (merge commit `ceae3be363a524693aece54d0844455cc2c36648`).
+- Progress correction after PR #10: [PR #11](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/11), merged 2026-11-15 (merge commit `99b91d979af428b70d76d901c8393553ca43384b`).
 
 ## Decisions confirmed
 
@@ -30,6 +31,8 @@
 - Customer SMS OTP: only to an existing, previously verified Customer mobile; OTP login never creates an account.
 - Staff authentication: username/password followed by mandatory TOTP; a single-use recovery code is the controlled recovery alternative. Password success alone never creates a normal session.
 - Customer and Staff authentication paths enforce explicit persisted `AccountType`.
+- Account activation is represented by a separate non-null server-controlled `IsActive` flag, independent of temporary lockout and `MustChangePassword`; existing accounts are backfilled active, and deactivation revokes pending authentication transactions and active sessions/refresh credentials.
+- Access JWTs carry a signed `account_type` claim (`customer` or `staff`) derived only from persisted AccountType; authorization policies enforce account type independently from role claims.
 - Customer normalized email and canonical E.164 mobile uniqueness are database-enforced; Staff username remains unique. Customer username is not a login identifier.
 - Access and refresh tokens: separate HttpOnly cookies; refresh token values are stored only as cryptographic hashes; rotation and reuse detection required.
 - OTP initial policy: 6 digits, 2-minute expiry, 60-second resend cooldown, 5 failed attempts per challenge, 5 sends/phone/hour and 10 sends/phone/24 hours; configurable.
@@ -60,7 +63,7 @@
 - Slice 2B complete and merged in PR #9: UUIDv7 `AuthSession` and `RefreshToken` persistence, database constraints, partial unique index for one active refresh token per session, and PostgreSQL transaction-based atomic rotation. Rotation uses session-first/token-second locking, constant-time secret verification, database time, conditional token consumption and atomic successor insertion. Valid consumed-token replay revokes only its owning session; wrong-secret attempts do not revoke.
 - PostgreSQL integration coverage includes successful rotation, wrong-secret non-revocation, strict replay revocation, concurrent same-token refresh, active-token uniqueness and session expiry boundaries.
 - Slice 2C design is documented separately. It defines Customer email/mobile password login, verified-mobile OTP, SuperAdmin-only Staff provisioning/password management with persisted MustChangePassword state, temporary initial/reset passwords and mandatory post-MFA password change, employee MFA enrollment/reset, Staff password + mandatory TOTP/recovery, account-level MFA lockout, identifier normalization/uniqueness, session creation, all-session revocation and transactional SMS outbox/provider failover.
-- No authentication endpoints, JWT issuance, login cookies, OTP challenge persistence/outbox worker, Staff MFA enrollment/transaction, TOTP or recovery-code implementation has been added yet. PR #10 remains documentation-only.
+- No authentication endpoints, JWT issuance, login cookies, OTP challenge persistence/outbox worker, Staff MFA enrollment/transaction, TOTP or recovery-code implementation has been added yet. PR #10 and PR #11 were documentation-only. The additional Foundation contract is also documentation-only until its PR is reviewed and merged.
 
 ## Phase 2 scope
 
@@ -97,6 +100,8 @@ Complete Phase 2 implementation and verification, report exact CI/build/test res
 
 ## Slice 2C design status
 
-PR #10, [Slice 2C authentication ceremony design](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/10), was merged into `main` on 2026-11-15 (merge commit `ceae3be363a524693aece54d0844455cc2c36648`). The design contract is approved and documented across this progress file, `SLICE-2C-AUTHENTICATION-DESIGN.md`, `SECURITY.md`, `PHASE-2-IDENTITY-SECURITY.md`, `ROADMAP.md` and `TECHNICAL-DEBT.md`.
+PR #10, [Slice 2C authentication ceremony design](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/10), was merged into `main` on 2026-11-15 (merge commit `ceae3be363a524693aece54d0844455cc2c36648`). PR #11 corrected this progress record and was merged on 2026-11-15 (merge commit `99b91d979af428b70d76d901c8393553ca43384b`).
 
-This merge is documentation-only. No authentication endpoints, login flows, JWT issuance, auth-cookie handling, OTP challenge persistence/outbox worker, Staff MFA enrollment/transactions, TOTP or recovery-code implementation has been added. Implementation must proceed through a separately scoped and explicitly approved implementation PR/phase.
+The owner-approved Foundation contract now additionally requires a non-null server-controlled `IsActive` account lifecycle flag (existing accounts backfilled active; independent from temporary lockout and `MustChangePassword`; deactivation revokes pending authentication transactions and active sessions/refresh credentials) and a signed `account_type` JWT claim (`customer` or `staff`) derived from persisted AccountType and enforced separately from roles. These clarifications are being documented before implementation.
+
+All merges so far in Slice 2C remain documentation-only. No authentication endpoints, login flows, JWT issuance, auth-cookie handling, OTP challenge persistence/outbox worker, Staff MFA enrollment/transactions, TOTP or recovery-code implementation has been added. Implementation must proceed through a separately scoped and explicitly approved implementation PR/phase.
