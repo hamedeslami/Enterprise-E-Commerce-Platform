@@ -60,6 +60,8 @@ Identifier normalization, database uniqueness, endpoint contracts, session creat
 - Strict refresh replay: a valid consumed-token replay revokes its owning session; no grace period.
 - Customer sessions: 30-day absolute / 7-day idle. Staff sessions: 12-hour absolute / 30-minute idle.
 - Absolute expiry never slides; idle expiry extends only after successful refresh.
+- `IsActive` is a non-null, server-controlled account lifecycle flag, independent of temporary Identity lockout and `MustChangePassword`. Existing accounts are backfilled active; new account creation must explicitly set it. Inactive accounts cannot authenticate, complete pending OTP/MFA, create sessions or refresh. Deactivation atomically invalidates pending authentication transactions and revokes active sessions/refresh credentials; reactivation does not restore them. Already-issued stateless JWTs retain only the bounded residual validity accepted by AR-SEC-001.
+- Access JWT contains a signed `account_type` claim with exactly `customer` or `staff`, derived from persisted `AccountType`, separate from role claims. Authorization policies enforce both account type and role; no per-request Identity lookup is introduced.
 - Access and refresh credentials are separate HttpOnly cookies; never return raw tokens in JSON or place them in browser storage, URLs or logs.
 - Enforce antiforgery request-token validation and independent exact-Origin validation for unsafe cookie-authenticated requests.
 - Browser topology: `https://shop.com`, `https://panel.shop.com`, `https://api.shop.com`; exact credentialed CORS allow-list and host-only API cookies.
@@ -77,7 +79,7 @@ Identifier normalization, database uniqueness, endpoint contracts, session creat
 ## Implementation sequence
 
 1. Slice 2C design — document and approve contracts before code.
-2. Shared session creation and token issuance foundation.
+2. Shared session creation and token issuance foundation, including `IsActive` migration/backfill and account-type JWT claim/policy.
 3. Customer email/mobile password and verified-mobile OTP flows, including PostgreSQL outbox and provider failover.
 4. SuperAdmin Staff provisioning/password management and employee MFA enrollment/reset; Staff password pre-authentication, TOTP, account lockout and recovery.
 5. Cookie/CSRF/Origin/CORS integration, authorization and Customer/Staff session-management endpoints including sign-out-all.
@@ -88,6 +90,8 @@ Each slice is separately reviewable. Do not proceed to the next slice until the 
 ## Required verification and Phase 2 exit
 
 - Identifier normalization, Customer-only database uniqueness and account-type separation.
+- `IsActive` migration/backfill, explicit server-side provisioning, inactive-account rejection, atomic deactivation revocation and reactivation without credential resurrection.
+- Signed `account_type` JWT claim derived from persisted AccountType; missing/malformed/mismatched claim rejection independently of role policy.
 - Verified email/mobile password login; verified-mobile OTP login and anti-enumeration.
 - OTP purpose, expiry, resend invalidation, single use, attempts, quotas, transactional outbox, provider failover/retry, expiry cleanup and concurrency.
 - Staff provisioning authorization, temporary-password flag on create/reset, migration backfill, mandatory post-MFA password change, restricted password-change credential, atomic password update + flag clear + credential consumption + session creation, password reset session revocation, invitation redemption, TOTP enrollment confirmation, recovery-code one-time display, MFA replay prevention, fifth-failure/15-minute lockout and audit.
@@ -104,6 +108,8 @@ The authoritative register and closure evidence are in [TECHNICAL-DEBT.md](TECHN
 
 ## Slice 2C design review resolution
 
-PR #10 remains an open, documentation-only draft. The seven findings from the first review and four findings from the second review have been incorporated into [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md) and synchronized with SECURITY, PROGRESS, ROADMAP and TECHNICAL-DEBT. The latest design now specifies SuperAdmin-only Staff provisioning/password management, temporary initial/reset passwords with mandatory post-MFA password change before normal session issuance, employee-controlled one-time MFA enrollment/reset, a 15-minute account-wide lockout after five failed MFA attempts (including session/refresh revocation), idempotent DELETE /sessions sign-out-all, and a PostgreSQL transactional SMS outbox with primary/secondary provider failover, bounded retries and expiry cleanup.
+PR #10, the documentation-only Slice 2C authentication ceremony design, was merged into `main` on 2026-11-15. PR #11 subsequently corrected the project progress record. The approved design is maintained in [SLICE-2C-AUTHENTICATION-DESIGN.md](SLICE-2C-AUTHENTICATION-DESIGN.md) and synchronized with SECURITY, PROGRESS, ROADMAP and TECHNICAL-DEBT.
 
-No authentication endpoint, JWT issuance, login cookie, OTP challenge/outbox worker, Staff MFA enrollment/transaction, TOTP or recovery-code implementation has been added. CI and a fresh review of the latest head must pass, followed by explicit owner approval, before implementation.
+The Foundation implementation contract is now further clarified: add non-null server-controlled `IsActive` (existing Customer/Staff accounts backfilled active; explicit server-side state for new accounts; independent of temporary lockout and `MustChangePassword`), and include a signed `account_type` JWT claim (`customer` or `staff`) derived only from persisted AccountType and enforced separately from role claims.
+
+No authentication endpoint, JWT issuance, login cookie, OTP challenge/outbox worker, Staff MFA enrollment/transaction, TOTP or recovery-code implementation has been added. The current work is still documentation-only; implementation requires its own separately reviewed PR and explicit owner approval.
