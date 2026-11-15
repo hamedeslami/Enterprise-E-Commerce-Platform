@@ -135,7 +135,8 @@ public sealed class RefreshTokenRotationTests : IClassFixture<ApiFactory>
             var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE identity."RefreshTokens"
-                SET "ExpiresAt" = clock_timestamp() - interval '1 minute'
+                SET "CreatedAt" = clock_timestamp() - interval '2 minutes',
+                    "ExpiresAt" = clock_timestamp() - interval '1 minute'
                 WHERE "Id" = {seed.TokenId}
                 """);
         }
