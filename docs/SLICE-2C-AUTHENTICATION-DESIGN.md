@@ -89,7 +89,7 @@ Changing AccountType is a privileged, audited operation in one PostgreSQL transa
 
 ## 4. Endpoint contracts
 
-All routes are under /api/v1/auth. DTOs contain no token fields. Credentials are returned only through response cookies after successful completion.
+Authentication routes are under /api/v1/auth; SuperAdmin staff-management routes are under /api/v1/admin. DTOs contain no access/refresh token fields. Credentials are returned only through response cookies after successful authentication; the one-time enrollment invitation is returned once to the initiating SuperAdmin.
 
 | Method and path | Purpose | Session created? |
 |---|---|---:|
@@ -208,7 +208,7 @@ If a future implementation changes algorithm/digits/period, it is a new reviewed
 - Generate each code from at least 128 bits of CSPRNG entropy (16 random bytes).
 - Encode as unpadded RFC 4648 Base32 using uppercase A-Z and 2-7; display once only. UI may group characters with hyphens for readability.
 - Normalize by uppercasing and removing only the documented grouping hyphens; reject any other character or malformed length.
-- Persist only SHA-256 over a domain-separated value containing a fixed recovery-code label, the owning user ID and normalized code. No plaintext or reversible encryption is stored. Given at least 128 bits of entropy, a password KDF is not required for offline guessing resistance; retain constant-time verification/consumption behavior.
+- Persist only SHA-256 over this exact UTF-8 byte sequence: ASCII label staff-recovery-v1, one 0x00 byte, the owning user UUID in lowercase 32-character N format, one 0x00 byte, then the normalized Base32 code. No plaintext or reversible encryption is stored. Given at least 128 bits of entropy, a password KDF is not required for offline guessing resistance; retain constant-time verification/consumption behavior.
 - A recovery code is consumed atomically with MFA transaction consumption and session/refresh creation. It is one-time and cannot be reused concurrently.
 - Display each generated code once; never return it from later APIs or log it.
 - All invalid, unknown, used and wrong-owner codes produce the same public failure. Do not expose match/no-match details or provide a code-enumeration oracle.
