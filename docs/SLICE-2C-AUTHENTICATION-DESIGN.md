@@ -48,7 +48,7 @@ For first-time MFA enrollment or an explicitly authorized MFA reset:
 3. The employee redeems the invitation together with their Staff username and administrator-provided password. The server verifies both credentials, invitation ownership, expiry and single-use state, then consumes the invitation and issues only a short-lived __Host-staff-enrollment restricted cookie. This credential permits enrollment only; it is not an AuthSession and grants no application API access.
 4. With that restricted cookie, the employee starts enrollment. The server generates the TOTP secret, persists it encrypted as pending, and returns the otpauth provisioning URI/QR payload to the employee exactly once over HTTPS. The SuperAdmin never receives or can retrieve the TOTP secret.
 5. The employee enters the first valid TOTP code. The server atomically confirms the pending authenticator, activates MFA, initializes replay state, generates recovery codes and returns those codes once to the employee. Enrollment completion creates no normal session; the employee must then perform regular username/password + TOTP login.
-6. Enrollment invitation and pending-secret transactions are single-use, time-bounded and audited. If the invitation or pending enrollment expires, SuperAdmin must issue a new invitation. An enrolled Staff account undergoing MFA reset is placed in EnrollmentPending; all existing sessions and pending MFA transactions are revoked, and all old recovery codes/authenticators are invalidated atomically before a new invitation is issued. No Staff login is allowed until the new authenticator is confirmed.
+6. Enrollment invitation and pending-secret transactions are single-use, time-bounded and audited. If the invitation or pending enrollment expires, SuperAdmin must issue a new invitation. If a redemption/start response is lost, do not expose a token/secret retrieval endpoint; SuperAdmin restarts enrollment with a new invitation. If enrollment completion succeeds but the recovery-code response is lost, SuperAdmin must perform an explicit MFA reset so a new recovery-code set can be generated; old codes remain invalid. An enrolled Staff account undergoing MFA reset is placed in EnrollmentPending; all existing sessions and pending MFA transactions are revoked, and all old recovery codes/authenticators are invalidated atomically before a new invitation is issued. No Staff login is allowed until the new authenticator is confirmed.
 
 The enrollment invitation has a maximum 24-hour lifetime; the restricted enrollment cookie and pending authenticator ceremony have a maximum 10-minute lifetime. Values are configurable downward, never upward beyond these limits. Failure, cancellation or expiry clears the enrollment cookie. There is no manual database seeding or support override for MFA enrollment.
 
@@ -111,7 +111,7 @@ Authentication routes are under /api/v1/auth; SuperAdmin staff-management routes
 | DELETE /sessions/{sessionId} | Revoke an owned non-current session | No |
 | DELETE /staff/{staffUserId}/sessions/{sessionId} | Security-admin revocation of a Staff session | No |
 
-The self-session routes are actor-generic: the authenticated Customer or Staff actor can list only their own sessions and revoke only their own non-current sessions. The response identifies the current session. Neither actor can revoke the current session through the single-session route; use logout or sign-out-all-devices for that. DELETE /sessions is the explicit sign-out-all-devices action: it atomically revokes every session owned by the current actor, including current, is idempotent, and returns 204 whether or not other active sessions existed. It clears the current browser's access, refresh and Staff-MFA cookies. It requires an authenticated Customer or Staff session, antiforgery token and exact trusted Origin. Staff self-service sign-out-all follows the same rule.
+The self-session routes are actor-generic: the authenticated Customer or Staff actor can list only their own sessions and revoke only their own non-current sessions. The response identifies the current session. Neither actor can revoke the current session through the single-session route; use logout or sign-out-all-devices for that. DELETE /sessions is the explicit sign-out-all-devices action: it atomically revokes every session owned by the current actor, including current, is idempotent, and returns 204 whether or not other active sessions existed. It clears the current browser's access, refresh, Staff-MFA and Staff-enrollment cookies. It requires an authenticated Customer or Staff session, antiforgery token and exact trusted Origin. Staff self-service sign-out-all follows the same rule.
 
 The SuperAdmin provisioning routes require the dedicated StaffProvisioning permission and completed MFA; they are never exposed to Customer or ordinary Staff roles. The staff-to-staff route requires a dedicated SecurityAdmin permission, Staff AccountType and completed MFA. It verifies that the target session belongs to the target Staff user, prevents cross-account IDOR, records actor/target/session/reason in the audit log and performs revocation atomically. It does not permit a Customer actor or ordinary Staff role to revoke another Staff member's sessions.
 
@@ -233,8 +233,8 @@ All four production cookies use Secure, HttpOnly, SameSite=Lax and Path=/. Their
 Development over local HTTP uses separate names: dev-access-token, dev-refresh-token, dev-staff-mfa and dev-staff-enrollment. These names are permitted only in the Development environment and only for the local HTTP origin. Secure=false is allowed only there. Production/Staging must reject development cookie configuration and must never emit dev-prefixed cookies. Production must never fall back to non-Secure cookies.
 
 Cookie lifecycle:
-- Successful Customer password or OTP login: set access + refresh; clear any stale staff-MFA cookie.
-- Successful Staff MFA: set access + refresh; clear staff-MFA cookie.
+- Successful Customer password or OTP login: set access + refresh; clear any stale staff-MFA and staff-enrollment cookies.
+- Successful Staff MFA: set access + refresh; clear staff-MFA and staff-enrollment cookies.
 - Successful Staff password pre-authentication: set/replace only staff-MFA; do not set or clear normal session cookies.
 - Successful enrollment invitation redemption: set only staff-enrollment; never set normal auth or staff-MFA cookies.
 - Enrollment completion, cancellation, expiry or failure: clear staff-enrollment; completion does not create a session.
@@ -242,8 +242,8 @@ Cookie lifecycle:
 - Failed password login or failed OTP request/verification: do not clear an unrelated existing authenticated session cookie. Keep the MFA cookie only while its transaction remains valid and attempts remain.
 - Expired, consumed, cancelled or attempt-exhausted MFA transaction: clear staff-MFA cookie.
 - Refresh success: rotate refresh and replace access cookie; refresh failure due to invalid/expired/revoked/replayed credentials clears access and refresh cookies.
-- Logout: revoke current session and clear access, refresh and staff-MFA cookies.
-- Sign-out-all-devices clears current browser's access/refresh cookies after revoking all applicable sessions.
+- Logout: revoke current session and clear access, refresh, staff-MFA and staff-enrollment cookies.
+- Sign-out-all-devices clears current browser's access, refresh, staff-MFA and staff-enrollment cookies after revoking all applicable sessions.
 - Cookie deletion must use the same name, Path and host-only scope as issuance, with an expired value/Max-Age=0; never add Domain during deletion.
 
 ## 8. OTP security and abuse controls
@@ -262,6 +262,7 @@ Retain the approved baseline:
 - Generic public responses; never log raw OTP, full phone, credentials, cookies or tokens.
 
 OTP purpose in this slice is specifically Customer login. Registration/phone-verification purposes are separate flows and must not be accepted by the login verifier.
+
 ### SMS delivery queue, provider failover and expiry
 
 OTP delivery uses a PostgreSQL-backed transactional outbox owned by the Identity module for this slice. Do not introduce an in-memory-only queue, require Redis, or add a message broker before measured need.
