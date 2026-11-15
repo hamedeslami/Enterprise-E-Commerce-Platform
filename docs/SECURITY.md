@@ -63,7 +63,7 @@ Staff password success creates only a short-lived MFA transaction, never a norma
 
 ## Authorization
 
-Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, SupportAgent. Roles group permissions; policies enforce specific permissions and resource context. Staff-only endpoints require staff permissions and completed MFA. Customers access only their own profiles, addresses, carts and orders. Guest access uses scoped high-entropy capabilities with limited lifetime, never account privileges. Never trust client role/user ID/ownership/price/stock/discount/payment state. Test horizontal and vertical escalation and IDOR.
+Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, SupportAgent. Roles are coarse groupings; ASP.NET Core authorization policies map endpoint access requirements to server-issued role claims in the access JWT and enforce resource ownership/context. The initial model does not perform an Identity database lookup on every authorized request. Staff-only endpoints require the appropriate staff role/policy and completed MFA. Customers access only their own profiles, addresses, carts and orders. Guest access uses scoped high-entropy capabilities with limited lifetime, never account privileges. Never trust client role, permission, user ID, ownership, price, stock, discount, payment state or authentication assurance. Test horizontal and vertical escalation and IDOR.
 
 ## OTP and authentication abuse controls
 
