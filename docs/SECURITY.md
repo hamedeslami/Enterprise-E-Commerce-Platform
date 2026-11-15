@@ -27,7 +27,7 @@ TOTP secrets are encrypted at rest. Enrollment requires confirmation of a genera
 Issue short-lived signed JWT access tokens and opaque cryptographically random refresh tokens. Store both only in separate HttpOnly cookies. Never expose token values in JSON, local/session storage, URLs or logs.
 
 Access token:
-- Initial target lifetime 5–10 minutes, configurable.
+- Initial target lifetime: 5 minutes. Configuration may be changed only through an explicit policy decision and tests; do not silently lengthen it.
 - Validate signature, issuer, audience, lifetime and allowed algorithm.
 - Minimal claims: subject, session ID, issued/expiry times and token ID; include authentication assurance/method only where needed for policy.
 - Key rotation uses key identifiers and documented overlap.
@@ -46,17 +46,24 @@ Refresh token:
 ## Cookies, CSRF and CORS
 
 - HttpOnly=true; Secure=true in production; explicit Path and expiry.
-- SameSite follows actual frontend/API topology; do not assume Lax works for cross-site deployments.
-- Prefer host-only cookies; set Domain only when required.
-- Cross-site cookies require SameSite=None; Secure and robust CSRF defenses.
-- State-changing browser requests require anti-forgery token and trusted Origin validation. Referer may be a carefully defined fallback, not the sole defense.
-- CORS uses exact allow-listed origins, never wildcard origins with credentials. Allow only required methods/headers.
-- Reject missing/untrusted Origin on browser-only unsafe routes per documented policy. Non-browser integrations require separate authentication, not weakened browser CSRF checks.
-- Document exact cookie names, anti-forgery bootstrap endpoint/header and frontend credential configuration before integration.
+- Production topology is `https://shop.com`, `https://panel.shop.com`, and `https://api.shop.com`; both frontends call the API cross-origin with credentials, while all three hosts are same-site under HTTPS.
+- Issue authentication cookies from `api.shop.com` as host-only cookies: omit `Domain`; use `Secure`, `HttpOnly`, `Path=/`, and explicit `SameSite=Lax`. Prefer `__Host-` names where their requirements are met.
+- SameSite and CORS do not replace CSRF protection: sibling subdomains are same-site. Every unsafe cookie-authenticated request requires both ASP.NET Core antiforgery validation and exact Origin validation.
+- CORS allows exactly `https://shop.com` and `https://panel.shop.com` with credentials; never use wildcard or arbitrary Origin reflection.
+- Missing Origin, untrusted Origin, missing/invalid antiforgery token are rejected. Do not use Referer as a fallback.
+- Browser clients send credentials and keep the antiforgery request token in memory; send it in `X-CSRF-TOKEN`. Bootstrap endpoint: `GET /api/v1/security/csrf-token`, with `Cache-Control: no-store`.
+
+## Session lifecycle and browser session management
+
+The detailed session/token contract is maintained in [SESSION-TOKEN-DESIGN.md](SESSION-TOKEN-DESIGN.md). Initial approved policy: Customer sessions have a 30-day absolute and 7-day idle lifetime; Staff sessions have a 12-hour absolute and 30-minute idle lifetime. Absolute expiry never slides; idle expiry extends only after successful refresh. Refresh replay is strict: presenting a valid consumed token again revokes its owning session and active successor; no grace period is allowed. A token-ID match with a wrong secret must not revoke a session.
+
+Customers may list only their own sessions, see the current session, revoke other sessions while preserving the current one, or explicitly sign out all devices. Do not display IP addresses or treat IP/User-Agent as authentication factors. Staff revocation of another staff member's session requires a dedicated security-administration permission and an audit event.
+
+Staff password success creates only a short-lived MFA transaction, never a normal session. The pre-authentication credential uses the dedicated `__Host-staff-mfa` cookie (maximum five minutes) and grants only completion/cancellation of that transaction. A normal staff session is created only after TOTP or a single-use recovery code succeeds.
 
 ## Authorization
 
-Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, SupportAgent. Roles group permissions; policies enforce specific permissions and resource context. Staff-only endpoints require staff permissions and completed MFA. Customers access only their own profiles, addresses, carts and orders. Guest access uses scoped high-entropy capabilities with limited lifetime, never account privileges. Never trust client role/user ID/ownership/price/stock/discount/payment state. Test horizontal and vertical escalation and IDOR.
+Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, SupportAgent. Roles are coarse groupings; ASP.NET Core authorization policies map endpoint access requirements to server-issued role claims in the access JWT and enforce resource ownership/context. The initial model does not perform an Identity database lookup on every authorized request. Staff-only endpoints require the appropriate staff role/policy and completed MFA. Customers access only their own profiles, addresses, carts and orders. Guest access uses scoped high-entropy capabilities with limited lifetime, never account privileges. Never trust client role, permission, user ID, ownership, price, stock, discount, payment state or authentication assurance. Test horizontal and vertical escalation and IDOR.
 
 ## OTP and authentication abuse controls
 
@@ -107,6 +114,12 @@ Allow-list required extensions and MIME types; inspect signatures/content, not j
 ## Payments and webhooks
 
 Never store PAN/CVV. Delegate sensitive entry to compliant hosted/tokenized gateway. Verify webhook signature against exact raw body using provider rules and constant-time comparison; apply timestamp/replay windows; persist provider event IDs uniquely. Process idempotently and reconcile server-to-server. Redirect/client assertion is not proof of payment. Keep provider secrets out of logs/source/API responses.
+
+## Data Protection deployment policy
+
+Production must use a persistent Data Protection key ring shared by all API instances that need to unprotect the same payloads, with one explicit stable ApplicationName and isolated key rings for Development, Staging and Production. Protect key-ring material at rest using an independently managed certificate or KMS-backed mechanism; restrict access to the API workload and authorized operators. Define protected backup, restore, rotation and compromise-recovery procedures and rehearse restoration. Production startup must fail closed if persistent shared storage or at-rest protection is missing or invalid; no ephemeral/container-local fallback is allowed in production. Local development may use a developer-local key ring or isolated Docker volume.
+
+The storage/encryption provider is intentionally not selected until hosting is known. This is tracked as **TD-SEC-001** in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md), with a mandatory gate before production deployment or enabling protected production data. JWT signing-key custody, OTP HMAC secret provisioning, SMS provider, production origins/TLS, WAF/trusted proxy, distributed rate limiting, backup/DR and privacy retention are also tracked there. The register is authoritative and must be reviewed at the start and end of every phase.
 
 ## Data and operations
 

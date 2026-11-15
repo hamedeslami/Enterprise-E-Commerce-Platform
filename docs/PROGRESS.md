@@ -1,14 +1,15 @@
 # Project Progress
 
 **Current phase:** Phase 2 — Identity and Security. Phase 1 is merged into `main` and closed.
-**Status:** Phase 0 approved; Phase 1 implemented, verified and merged. Phase 2 scope and initial authentication/OTP policy are approved. Identity persistence foundation and its initial EF migration are implemented on `phase-2/identity-security`; the latest CI run passed PostgreSQL migration integration tests and Docker Compose smoke tests. Authentication endpoints are not implemented yet.
+**Status:** Phase 2 Identity persistence foundation is merged through PR #6. Session/token lifecycle and browser security design are documented on `phase-2/session-token-design` in open Draft PR #7; this design-only PR is not merged. No authentication endpoints or token/session persistence have been implemented yet. CI run #147 passed both `build-and-test` and `compose-smoke-test` on the earlier PR #7 head `624cf95c630a855ece591d3d2ddf11ede0eff18d`. After the final refresh-replay design corrections, the latest PR #7 head `881a41fd5bb65dc1ed26def062c0af0ebae71198` also passed both checks (`build-and-test` and `compose-smoke-test`; GitHub Actions runs #43686457891 and #43686455765).
 
 ## Repository
 
 - Repository: https://github.com/hamedeslami/Enterprise-E-Commerce-Platform
 - Phase 1 foundation and CI verification are merged into `main`.
 - Phase 1 final PR: [PR #5](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/pull/5), merged 2026-11-14.
-- Current Phase 2 branch: `phase-2/identity-security`.
+- Phase 2 Identity persistence branch: `phase-2/identity-security` (PR #6 merged into `main`).
+- Current Phase 2 design branch: `phase-2/session-token-design` (PR #7 is open Draft and unmerged).
 
 ## Decisions confirmed
 
@@ -28,6 +29,14 @@
 - OTP initial policy: 6 digits, 2-minute expiry, 60-second resend cooldown, 5 failed attempts per challenge, 5 sends/phone/hour and 10 sends/phone/24 hours; configurable.
 - OTP challenge and shared per-phone/global SMS quotas are persisted and updated atomically in PostgreSQL. ASP.NET Core per-IP rate limiting and edge/WAF protection complement these controls.
 - SMS provider is intentionally not selected yet; provider adapter remains independent.
+- Refresh replay policy: strict; a valid consumed-token replay revokes the owning session, with no grace window.
+- Account classification: explicit, server-controlled `Customer` or `Staff`, independent of roles.
+- Initial authorization: server-issued JWT role claims mapped through ASP.NET Core policies; no per-request Identity lookup. The accepted stale-role/session-revocation window is the remaining access-token lifetime (target 5 minutes) plus configured clock skew.
+- JWT signing: RSA/RS256, minimum 3072-bit key, unique `kid`, public-key overlap during rotation, and fail-closed production startup.
+- Browser topology: `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact credentialed CORS allow-list and independent CSRF + Origin checks.
+- Staff MFA pre-authentication uses a dedicated five-minute `__Host-staff-mfa` cookie; it does not create a normal session.
+- ASP.NET Core antiforgery cookie + JSON request token; frontend keeps request token in memory and sends `X-CSRF-TOKEN`.
+- Session policy: Customer 30-day absolute / 7-day idle; Staff 12-hour absolute / 30-minute idle. Customer session listing/revocation UX is defined; IP is not shown.
 
 ## Phase 1 delivered and verified
 
@@ -50,7 +59,8 @@
 - Updated Docker restore inputs and enabled CI push triggers for all `phase-*/**` branches.
 - Generated the initial EF migration, Designer and ModelSnapshot using GitHub Actions (no local .NET installation required) and committed them to the Phase 2 branch.
 - Added an integration test that applies the migration to the CI PostgreSQL database and verifies the migration history and users table.
-- Added Data Protection registration; production still requires a persistent, protected shared key ring.
+- Added Data Protection registration; production requires a persistent, protected shared key ring.
+- PR #7 documents session/token lifecycle, strict refresh replay, account separation, JWT claim authorization, RSA signing-key lifecycle, customer/staff session policy, cookie/CSRF/Origin contracts, and production Data Protection deployment requirements. It remains design-only and unmerged.
 - Identity persistence slice 1 is implemented and verified: the PostgreSQL migration integration test and the complete CI pipeline passed on the latest Phase 2 commit.
 - No authentication endpoints have been implemented yet; customer login/OTP, staff MFA, sessions/tokens, cookies, CSRF and authorization remain subsequent implementation work.
 
@@ -64,12 +74,14 @@
 - OTP challenge lifecycle, per-phone/IP/global quotas, provider circuit breaker and abuse telemetry.
 - Security-focused unit/integration tests.
 
-See [Phase 2 Identity and Security](PHASE-2-IDENTITY-SECURITY.md) for the detailed design and exit criteria.
+See [Phase 2 Identity and Security](PHASE-2-IDENTITY-SECURITY.md) and [Session and Token Lifecycle Design](SESSION-TOKEN-DESIGN.md) for the detailed contracts and exit criteria. All deferred decisions and production gates are tracked in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md).
 
 ## Deferred decisions
 
+The authoritative register, including closure gates and required evidence, is [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). The list below is only a brief status summary and must not be used as a substitute for that register.
+
 - Iranian SMS provider and message template/API contract.
-- Exact production frontend/API origin topology and cookie SameSite/Domain configuration.
+- Production deployment configuration for the already-decided browser topology: TLS/certificate termination, exact deployed origins, cookie attributes and trusted-proxy/forwarded-header settings.
 - Production WAF/CDN/edge provider and thresholds.
 - Whether Redis is justified after measured need.
 - Password/session retention policy and detailed operational alert thresholds.

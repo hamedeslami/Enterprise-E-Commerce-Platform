@@ -18,7 +18,7 @@ Solution/build configuration; API host; options validation; PostgreSQL connectio
 
 ## Phase 2 — Identity and security
 
-**Status:** Approved and in progress on `phase-2/identity-security`.
+**Status:** Phase 2 is in progress. Identity persistence foundation is merged through PR #6. The session/token lifecycle and browser-security design is under review in open Draft PR #7 on `phase-2/session-token-design`; it is design-only and unmerged.
 
 - Customer login with username/password or SMS OTP to a previously verified mobile number.
 - Staff login with username/password plus mandatory TOTP MFA; no SMS OTP for staff MFA.
@@ -75,13 +75,19 @@ Security/privacy/dependency review, performance/query plans/load tests, concurre
 
 **Exit:** release checklist signed off; residual risks documented and accepted by owner.
 
+## Technical debt and deferred decisions
+
+Every deferred decision must be recorded with an ID, reason, closure milestone and objective evidence in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). Review the register at the start and end of every phase. No security or operational prerequisite may be deferred beyond its explicit gate; all rows marked before production block release until implemented and verified. A provider being selected is not closure evidence.
+
 ## Working agreement
 
 For each phase: state scope and decisions, list changed files, implement, run build/tests, report exact results, explain remaining issues, update docs/progress, and wait for approval. Never claim tests passed unless actually run. No fake critical providers or unexplained placeholders.
 
 ## Decisions deferred to relevant phases
 
-- **Phase 2:** Iranian SMS provider; exact frontend/API origin topology; production WAF/CDN; Redis adoption only if measured need.
+All deferrals below are tracked with closure gates in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md); this list is an index, not a substitute for the register.
+
+- **Phase 2:** Iranian SMS provider and message contract; production WAF/CDN/edge and trusted-proxy configuration; Redis adoption only if measured need. The logical browser topology (`shop.com`, `panel.shop.com`, `api.shop.com`) is already decided; deployment-specific TLS, origin and cookie configuration remains a production task.
 - **Before Phase 3:** SKU uniqueness scope; fractional inventory; stock behavior for grouped, virtual, downloadable and external products.
 - **Before Phase 4:** whole-toman rounding; applicable Iranian tax rules and tax-inclusive/exclusive pricing.
 - **Before Phase 5:** guest checkout; Iranian billing/shipping address model.
