@@ -8,4 +8,6 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     {
         Id = Guid.CreateVersion7();
     }
+
+    public AccountType AccountType { get; set; }
 }

@@ -54,7 +54,7 @@ namespace Ecommerce.Modules.Identity.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("AccessFailedCount")
+                    b.Property<int>("AccountType")\n                        .HasColumnType("integer");\n\n                    b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
                     b.Property<string>("ConcurrencyStamp")
@@ -110,7 +110,7 @@ namespace Ecommerce.Modules.Identity.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
-                    b.ToTable("AspNetUsers", "identity");
+                    b.ToTable("AspNetUsers", "identity", t => t.HasCheckConstraint("CK_AspNetUsers_AccountType", "\\\"AccountType\\\" IN (1, 2)"));
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
