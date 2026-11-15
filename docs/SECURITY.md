@@ -14,30 +14,41 @@ Use ASP.NET Core Identity for password hashing, account lifecycle and supported 
 
 ### Customer sign-in
 
-Support username/password and SMS OTP. SMS OTP is sent only to a previously verified mobile number and does not implicitly create an account. Registration and phone verification are explicit flows. OTP request responses must not disclose whether a phone number is registered.
+Customer password sign-in accepts one `identifier` plus `password`; the identifier is either email or mobile number. The server normalizes and classifies it; the client cannot choose an account type or query mode.
+
+- Email + password is accepted only when `EmailConfirmed == true`.
+- Mobile + password is accepted only when `PhoneNumberConfirmed == true`.
+- SMS OTP is available only for an existing Customer account with a previously verified mobile number.
+- OTP login never creates an account. Registration and verification remain explicit flows.
+- Customer authentication endpoints must reject Staff accounts, even if a contact identifier matches.
+- Public responses must not reveal whether an identifier exists, is unverified, belongs to Staff, is locked, or has an incorrect password.
+
+Customer email is normalized using ASP.NET Core Identity normalization; do not apply provider-specific dot/plus-tag rewriting. Iranian mobile inputs are normalized to canonical E.164 (`+989xxxxxxxxx`); accept only documented input forms and reject ambiguous values. PostgreSQL must enforce uniqueness for normalized Customer email and canonical Customer mobile. Application pre-checks are not authoritative. Staff usernames remain unique through Identity's normalized-username constraint. Customer username is not a login identifier; if Identity requires one, use a server-generated internal value that Customer login endpoints never accept.
 
 ### Staff sign-in and MFA
 
-All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. Do not permit SMS OTP as a staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited. Do not issue a normal session after password validation alone: use a short-lived MFA transaction and issue session cookies only after TOTP or a single-use recovery code succeeds.
+All staff roles (SuperAdmin, Admin, StoreManager, SupportAgent) require username/password plus TOTP MFA. A single-use recovery code is the controlled recovery alternative. Do not permit SMS OTP as a staff second factor or staff-only login method. Each staff member has an individual account; shared credentials are prohibited.
 
-TOTP secrets are encrypted at rest. Enrollment requires confirmation of a generated code before MFA becomes active. Recovery codes are stored only as hashes, are single-use, and their use/reset is audited. Staff MFA recovery must not provide an unauthenticated bypass.
+Password success creates only a short-lived, purpose-bound MFA transaction and the dedicated `__Host-staff-mfa` cookie (maximum five minutes). It MUST NOT create a normal session, access JWT or refresh token. Issue normal session credentials only after TOTP or a single-use recovery code succeeds.
+
+TOTP secrets are encrypted at rest. Enrollment requires confirmation of a generated code before MFA becomes active. Enforce a small explicit clock-skew window and prevent accepted TOTP time-step replay, including concurrent submissions. Recovery codes are stored only as hashes, are single-use, and their use/reset is audited. Staff MFA recovery must not provide an unauthenticated bypass.
 
 ### Access and refresh tokens
 
 Issue short-lived signed JWT access tokens and opaque cryptographically random refresh tokens. Store both only in separate HttpOnly cookies. Never expose token values in JSON, local/session storage, URLs or logs.
 
 Access token:
-- Initial target lifetime: 5 minutes. Configuration may be changed only through an explicit policy decision and tests; do not silently lengthen it.
-- Validate signature, issuer, audience, lifetime and allowed algorithm.
-- Minimal claims: subject, session ID, issued/expiry times and token ID; include authentication assurance/method only where needed for policy.
+- Initial target and maximum lifetime: 5 minutes. Configuration may lower it but must not silently lengthen it.
+- Validate signature, issuer, audience, lifetime and fixed allowed algorithm.
+- Minimal claims: subject, session ID, issued/expiry times and token ID; include server-derived roles and authentication assurance only where required by policy.
 - Key rotation uses key identifiers and documented overlap.
 
 Refresh token:
-- Cryptographically secure random value with sufficient entropy.
+- Cryptographically secure random value with 256-bit entropy.
 - Persist only a cryptographic hash, never raw token.
 - Bind to user and session/family; track issued, expiry, consumed, revoked and replacement state.
 - Rotate on every successful refresh in a transaction.
-- Reuse of a consumed token revokes affected family/session and requires re-authentication.
+- Reuse of a consumed token revokes affected session/family and requires re-authentication.
 - Revoke sessions on logout, password/security events and admin action.
 - Enforce single-use semantics under concurrent refresh attempts.
 
@@ -69,7 +80,7 @@ Deny by default. Initial roles: SuperAdmin, Admin, StoreManager, Customer, Suppo
 
 ### OTP challenge security
 
-Customer SMS OTP is purpose-bound (for example, login, registration verification or phone verification), tied to one normalized verified phone/account and one challenge. Generate six-digit values with a cryptographically secure RNG. Challenge lifetime defaults to two minutes; resend cooldown defaults to 60 seconds; maximum failed verification attempts defaults to five. New challenges invalidate prior active challenges for the same purpose according to an atomic database rule.
+Customer SMS OTP is purpose-bound to Customer login for this slice, tied to one normalized verified phone/account and one challenge. Generate six-digit values with a cryptographically secure RNG. Challenge lifetime defaults to two minutes; resend cooldown defaults to 60 seconds; maximum failed verification attempts defaults to five. New challenges invalidate prior active challenges for the same purpose according to an atomic database rule.
 
 A six-digit OTP has a small search space: do not store a plain SHA hash. Store HMAC-SHA-256 using a dedicated secret held outside the database and include challenge ID and purpose in the MAC input. Compare in constant time. Store only challenge metadata, HMAC and attempt/status state; never persist or log raw codes. Verification, attempt increments and single-use consumption must be atomic in PostgreSQL.
 
@@ -87,7 +98,7 @@ These are starting values to tune against actual traffic and provider constraint
 
 - Network edge/WAF/reverse proxy limits, connection/request-size controls and upstream DDoS mitigation.
 - ASP.NET Core rate limiting for coarse per-IP/network limits. It is not a substitute for edge DDoS protection.
-- Shared atomic PostgreSQL quotas for per-phone and global SMS budgets so multiple API instances cannot bypass limits. Do not rely solely on per-process in-memory counters.
+- Shared atomic PostgreSQL quotas for per-phone and global SMS budgets so multiple API instances cannot bypass them. Do not rely solely on per-process in-memory counters.
 - CAPTCHA/proof-of-human challenges when risk thresholds are crossed, as an additional control rather than the primary limiter.
 - Provider circuit breaker, bounded concurrency, strict spend ceiling and no unbounded retries.
 - Progressive throttling instead of permanent account lockout that can be weaponized.
