@@ -38,9 +38,9 @@ Every endpoint enforces the persisted AccountType. Customer endpoints never fall
 
 ### Staff provisioning and MFA enrollment
 
-Staff accounts are never self-registered. Only a SuperAdmin with the dedicated StaffProvisioning permission may create a Staff account, set its initial password, reset its password, or initiate/reset its MFA enrollment. These actions require completed SuperAdmin MFA, are audited with actor/target/reason, and are protected by CSRF plus exact Origin validation.
+Staff accounts are never self-registered. Only a SuperAdmin with the dedicated StaffProvisioning permission may create a Staff account, set its initial password, reset its password, or initiate/reset its MFA enrollment. These actions require completed SuperAdmin MFA, are audited with actor/target/reason, and are protected by CSRF plus exact Origin validation. Persist a non-null server-controlled `MustChangePassword` flag on the user. It is set to true whenever SuperAdmin creates an account or sets/resets its password; clients cannot set or clear it. It is cleared only by the employee completing the mandatory password-change ceremony.
 
-The administrative API accepts the initial password as an explicit credential input; it is never generated into a public response, included in an invitation link, logged, or sent through the SMS delivery pipeline. The SuperAdmin communicates the initial/reset password to the employee through an independently trusted channel. Password reset revokes all of the target Staff member's active sessions and pending MFA transactions atomically. It does not silently reset or bypass the enrolled TOTP factor.
+The administrative API accepts the initial/reset password as an explicit credential input; it is never generated into a public response, included in an invitation link, logged, or sent through the SMS delivery pipeline. The SuperAdmin communicates it through an independently trusted channel. Initial and reset passwords are temporary credentials, not permanent credentials. After completing MFA, the employee MUST change the temporary password before receiving any normal session or application access. Password reset sets `MustChangePassword=true` and atomically revokes all target sessions and pending MFA transactions. It does not silently reset or bypass the enrolled TOTP factor. The new password must satisfy the configured Identity password policy and must differ from the temporary password; password change is audited.
 
 For first-time MFA enrollment or an explicitly authorized MFA reset:
 1. SuperAdmin initiates enrollment for one existing Staff account. The server creates a cryptographically random, single-use invitation token (at least 256 bits), stores only its hash, binds it to the target Staff user and StaffMfaEnrollment purpose, and sets a configurable 24-hour maximum expiry.
@@ -50,7 +50,7 @@ For first-time MFA enrollment or an explicitly authorized MFA reset:
 5. The employee enters the first valid TOTP code. The server atomically confirms the pending authenticator, activates MFA, initializes replay state, generates recovery codes and returns those codes once to the employee. Enrollment completion creates no normal session; the employee must then perform regular username/password + TOTP login.
 6. Enrollment invitation and pending-secret transactions are single-use, time-bounded and audited. If the invitation or pending enrollment expires, SuperAdmin must issue a new invitation. If a redemption/start response is lost, do not expose a token/secret retrieval endpoint; SuperAdmin restarts enrollment with a new invitation. If enrollment completion succeeds but the recovery-code response is lost, SuperAdmin must perform an explicit MFA reset so a new recovery-code set can be generated; old codes remain invalid. An enrolled Staff account undergoing MFA reset is placed in EnrollmentPending; all existing sessions and pending MFA transactions are revoked, and all old recovery codes/authenticators are invalidated atomically before a new invitation is issued. No Staff login is allowed until the new authenticator is confirmed.
 
-The enrollment invitation has a maximum 24-hour lifetime; the restricted enrollment cookie and pending authenticator ceremony have a maximum 10-minute lifetime. Values are configurable downward, never upward beyond these limits. Failure, cancellation or expiry clears the enrollment cookie. There is no manual database seeding or support override for MFA enrollment.
+The enrollment invitation has a maximum 24-hour lifetime; the restricted enrollment cookie and pending authenticator ceremony have a maximum 10-minute lifetime. Values are configurable downward, never upward beyond these limits. Failure, cancellation or expiry clears the enrollment cookie. There is no manual database seeding or support override for MFA enrollment. The post-MFA password-change cookie is separate, single-purpose, single-use, maximum 10 minutes, and is cleared on success, failure exhaustion, cancellation or expiry. It cannot be used for refresh, session listing, logout of another session or any business API.
 
 ## 3. Identifier and database uniqueness contract
 
@@ -100,7 +100,8 @@ Authentication routes are under /api/v1/auth; SuperAdmin staff-management routes
 | POST /staff/mfa/enrollment/redeem | Redeem SuperAdmin-issued invitation using Staff credentials | No |
 | POST /staff/mfa/enrollment/start | Create pending TOTP secret and return one-time provisioning payload | No |
 | POST /staff/mfa/enrollment/complete | Confirm first TOTP code, activate MFA and display recovery codes once | No |
-| POST /staff/mfa/verify | Complete Staff TOTP/recovery ceremony | Yes, on success |
+| POST /staff/mfa/verify | Complete Staff TOTP/recovery ceremony | Yes, unless password change is required |
+| POST /staff/password/change | Change temporary Staff password using restricted post-MFA credential | Yes, only after successful change |
 | POST /refresh | Rotate refresh token and issue access token | Existing session |
 | DELETE /sessions | Revoke all sessions for the current actor, including current | Revokes all |
 | POST /api/v1/admin/staff | SuperAdmin creates Staff account and sets initial password | No |
@@ -133,7 +134,7 @@ OTP verification accepts mobileNumber and code. The server resolves the canonica
 
 Staff login accepts username and password only when the account is enabled, MFA enrollment is Active and no MFA lockout is in effect. Success creates a single-use MFA transaction and sets only the dedicated MFA cookie. An account in EnrollmentPending must use the SuperAdmin-issued enrollment invitation instead; it cannot obtain an MFA transaction or normal session. Staff login does not authenticate the browser or issue normal session credentials.
 
-MFA verification accepts either a TOTP code or a recovery code. The server resolves the pending transaction from the dedicated cookie; never accept client-supplied user ID or transaction owner. Validate purpose, expiry, cancellation/consumption state and transaction/account-level failure budgets. If the Staff account is not MFA-enrolled or is temporarily MFA-locked, reject without creating a session.
+MFA verification accepts either a TOTP code or a recovery code. The server resolves the pending transaction from the dedicated cookie; never accept client-supplied user ID or transaction owner. Validate purpose, expiry, cancellation/consumption state and transaction/account-level failure budgets. If the Staff account is not MFA-enrolled or is temporarily MFA-locked, reject without creating a session. After a successful factor, if `MustChangePassword=true`, atomically consume the MFA transaction/factor and issue only a restricted `__Host-staff-password-change` cookie (maximum 10 minutes); do not create AuthSession, access JWT or refresh token. This cookie authorizes only POST /staff/password/change. The endpoint accepts the current temporary password and a new password, applies Identity password policy, rejects reuse of the temporary password, clears `MustChangePassword`, and creates the normal session plus initial refresh token in the same PostgreSQL transaction. If `MustChangePassword=false`, successful MFA follows the normal shared session-creation path.
 
 ## 5. Shared session creation and transaction boundary
 
@@ -228,17 +229,19 @@ Production cookies are issued by api.shop.com as host-only cookies. No Domain at
 | Staff MFA transaction | __Host-staff-mfa |
 | Staff MFA enrollment transaction | __Host-staff-enrollment |
 
-All four production cookies use Secure, HttpOnly, SameSite=Lax and Path=/. Their expiry is explicit and never exceeds the underlying credential/transaction expiry. The __Host- prefix is valid because Secure is set, Path is exactly /, and Domain is omitted. The enrollment cookie is limited to the maximum 10-minute enrollment transaction and grants no normal session authority. Access and refresh remain separate cookies.
+All production cookies use Secure, HttpOnly, SameSite=Lax and Path=/. Their expiry is explicit and never exceeds the underlying credential/transaction expiry. The __Host- prefix is valid because Secure is set, Path is exactly /, and Domain is omitted. Enrollment and post-MFA password-change cookies are restricted, short-lived credentials and grant no normal session authority. Access and refresh remain separate cookies.
 
-Development over local HTTP uses separate names: dev-access-token, dev-refresh-token, dev-staff-mfa and dev-staff-enrollment. These names are permitted only in the Development environment and only for the local HTTP origin. Secure=false is allowed only there. Production/Staging must reject development cookie configuration and must never emit dev-prefixed cookies. Production must never fall back to non-Secure cookies.
+Production cookie names are `__Host-access-token`, `__Host-refresh-token`, `__Host-staff-mfa`, `__Host-staff-enrollment` and `__Host-staff-password-change`. Development over local HTTP uses separate names: `dev-access-token`, `dev-refresh-token`, `dev-staff-mfa`, `dev-staff-enrollment` and `dev-staff-password-change`. These names are permitted only in the Development environment and only for the local HTTP origin. Secure=false is allowed only there. Production/Staging must reject development cookie configuration and must never emit dev-prefixed cookies. Production must never fall back to non-Secure cookies.
 
 Cookie lifecycle:
 - Successful Customer password or OTP login: set access + refresh; clear any stale staff-MFA and staff-enrollment cookies.
-- Successful Staff MFA: set access + refresh; clear staff-MFA and staff-enrollment cookies.
+- Successful Staff MFA when `MustChangePassword=false`: set access + refresh; clear staff-MFA, staff-enrollment and staff-password-change cookies.
+- Successful Staff MFA when `MustChangePassword=true`: set only staff-password-change; clear staff-MFA and staff-enrollment; do not create a session or normal auth cookies.
+- Successful Staff password change: clear staff-password-change and set access + refresh only after the password update and session creation commit atomically.
 - Successful Staff password pre-authentication: set/replace only staff-MFA; do not set or clear normal session cookies.
 - Successful enrollment invitation redemption: set only staff-enrollment; never set normal auth or staff-MFA cookies.
 - Enrollment completion, cancellation, expiry or failure: clear staff-enrollment; completion does not create a session.
-- Successful Staff password reset: revoke target sessions and pending MFA transactions; the target must still complete the existing enrolled factor unless SuperAdmin explicitly performs the separate MFA-reset ceremony.
+- Successful Staff password reset: set `MustChangePassword=true`, revoke target sessions and pending MFA transactions; the target must still complete the existing enrolled factor unless SuperAdmin explicitly performs the separate MFA-reset ceremony.
 - Failed password login or failed OTP request/verification: do not clear an unrelated existing authenticated session cookie. Keep the MFA cookie only while its transaction remains valid and attempts remain.
 - Expired, consumed, cancelled or attempt-exhausted MFA transaction: clear staff-MFA cookie.
 - Refresh success: rotate refresh and replace access cookie; refresh failure due to invalid/expired/revoked/replayed credentials clears access and refresh cookies.
@@ -332,7 +335,9 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 - TOTP secret is returned only once to the employee, never to SuperAdmin; first valid code activates MFA and recovery codes are displayed once.
 - MFA reset invalidates old authenticators/recovery codes and all sessions before reenrollment; Staff cannot log in while enrollment is pending.
 - Five failed MFA submissions in a rolling 15-minute account window trigger a 15-minute lockout across new transactions/devices; the transition atomically revokes active sessions/refresh credentials, invalidates pending MFA transactions and is audited. Already-issued JWT residual validity is bounded by AR-SEC-001; concurrency cannot exceed the threshold.
-- Staff password reset revokes active sessions and pending MFA transactions without silently bypassing or resetting TOTP.
+- Staff password reset sets `MustChangePassword=true`, revokes active sessions and pending MFA transactions without silently bypassing or resetting TOTP.
+- Staff with `MustChangePassword=true` can complete password + MFA but cannot obtain a normal session until the temporary password is changed.
+- The post-MFA password-change credential permits only the password-change endpoint and expires within 10 minutes; password update, flag clear, session and initial refresh insertion are atomic.
 
 ### Session, cookie, browser and authorization
 - Correct Customer/Staff lifetime selection and absolute-expiry cap.
