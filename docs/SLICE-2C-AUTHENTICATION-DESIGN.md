@@ -138,6 +138,14 @@ MFA verification accepts either a TOTP code or a recovery code. The server resol
 
 ## 5. Shared session creation and transaction boundary
 
+### Account activation state
+
+Add a non-null Boolean `IsActive` column to `identity.AspNetUsers`. It is a server-controlled account lifecycle state, independent of ASP.NET Identity's temporary `LockoutEnd` and independent of `MustChangePassword`. Existing Customer and Staff rows are backfilled to `true` to preserve their current ability to authenticate; the migration must not silently disable existing accounts. Every new-account provisioning path must explicitly choose `IsActive` on the server. Do not accept it from public authentication/profile DTOs, and do not add a database default that hides missing provisioning decisions.
+
+`IsActive=false` means the account cannot start or complete an authentication ceremony, obtain a session, or rotate a refresh token. OTP/MFA pending transactions for the account must not be usable. A privileged, audited account-deactivation operation must atomically mark the account inactive, invalidate its pending authentication transactions, revoke all active sessions and refresh credentials, and commit as one PostgreSQL transaction. Reactivation is also a privileged, audited state change; it does not restore previously revoked sessions or credentials. Already-issued stateless access JWTs can remain valid only for the bounded residual lifetime accepted by AR-SEC-001 (maximum five minutes plus configured clock skew); do not claim immediate JWT revocation. Add migration, authorization, refresh, pending-transaction, session-revocation and concurrent state-transition tests.
+
+To make activation changes race-safe, use one database lock order across account-sensitive authentication operations: lock the owning `ApplicationUser` row first; then lock the relevant OTP challenge or Staff MFA transaction; then lock affected `AuthSession` rows in stable UUID order; finally lock their `RefreshToken` rows. Session creation and refresh must re-check `IsActive` while holding the user-row lock. Account deactivation takes the same order and cannot commit while a concurrent refresh/authentication operation can later create credentials for the now-inactive account. This intentionally extends the existing session-first/token-second order to user-first/session-second/token-third; update `RefreshTokenRotationService` accordingly in Foundation. No path may lock a child credential row and then acquire its owning user row.
+
 ### Staff temporary-password persistence
 
 Add a non-null Boolean `MustChangePassword` column to `identity.AspNetUsers`, server-controlled and never accepted from public DTOs. New Customer accounts use false. SuperAdmin Staff creation and every SuperAdmin password reset set it true in the same transaction as the password update. The migration must backfill existing Staff rows to true so no pre-existing Staff account bypasses the mandatory rotation; existing Customer rows remain false. Only the successful restricted password-change ceremony may clear it. Add PostgreSQL migration/integration tests for nullability, backfill by AccountType, and rejection of client attempts to mutate the flag.
@@ -173,7 +181,9 @@ If the database commit succeeds but the HTTP response is lost before the browser
 - Staff: 12-hour absolute / 30-minute idle.
 - Absolute expiry never slides; idle expiry extends only after successful refresh.
 - Use UTC/database time and enforce IdleExpiresAt <= AbsoluteExpiresAt.
+- Revalidate `ApplicationUser.IsActive == true` at session creation and refresh; never infer activation from lockout state or client input.
 - Load current roles from server-side Identity data; never copy roles or assurance from client/JWT state.
+- Every access JWT contains the server-issued `account_type` claim with exactly one lowercase value: `customer` or `staff`, derived from the persisted `AccountType`. The claim is distinct from role claims; it is never client-supplied and is not a role. Configure ASP.NET Core authorization to require the correct account-type claim as well as the required role/policy for protected endpoints.
 - Access JWT is RS256, maximum five minutes, with approved minimal claims and server-issued role claims.
 - Session and initial refresh-token insertion are atomic. Persist only SHA-256(refresh secret), never the raw secret.
 - No raw access/refresh token in JSON, logs, traces or exceptions.
@@ -292,7 +302,9 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 
 ## 9. Failure, concurrency and authorization invariants
 
-- Customer and Staff endpoints enforce AccountType server-side.
+- Customer and Staff endpoints enforce the persisted AccountType server-side and the matching signed `account_type` JWT claim (`customer` or `staff`).
+- `IsActive` is non-null and server-controlled; it is independent of `LockoutEnd` and `MustChangePassword`. Inactive accounts cannot authenticate, complete pending OTP/MFA ceremonies, create sessions or refresh tokens.
+- Account deactivation atomically invalidates pending authentication transactions and revokes active sessions/refresh credentials; reactivation never restores revoked credentials. Already-issued stateless JWT validity remains bounded by AR-SEC-001.
 - Customer email/mobile lookup never falls back to Staff accounts; Staff username lookup never falls back to Customer accounts.
 - Unconfirmed email/mobile cannot authenticate by password; unverified mobile cannot receive or verify login OTP.
 - OTP verification and Staff MFA completion are single-use under concurrency.
@@ -310,6 +322,11 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 ## 10. Required verification
 
 ### Identifier and account separation
+- `IsActive` migration backfills existing Customer and Staff accounts to true, remains non-null, and has no implicit database default for new accounts.
+- New account provisioning explicitly sets `IsActive`; public DTOs cannot set or change it.
+- Inactive Customer/Staff password login, OTP request/verify, Staff MFA completion, session creation and refresh are rejected.
+- Deactivation atomically invalidates pending OTP/MFA transactions and revokes all active sessions/refresh tokens; reactivation does not resurrect credentials; concurrent deactivate/reactivate operations preserve a deterministic audited final state.
+- Access JWT contains exactly one lowercase `account_type` claim derived from persisted AccountType; Customer/Staff endpoint policy rejects missing, malformed or mismatched claim values independently of role claims.
 - Email normalization, case-insensitive lookup and duplicate normalized Customer email rejection at PostgreSQL level.
 - Iranian mobile numeral normalization and accepted/rejected input formats.
 - Canonical phone uniqueness for Customer accounts, including concurrent writes.
@@ -366,7 +383,7 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 ## 11. Implementation sequence and gates
 
 1. **2C-Design (this document):** approve endpoint, normalization, persistence and ceremony contracts before implementation.
-2. **2C-Foundation:** shared validated session policy and session-creation service; initial refresh token + access-token issuance boundary; unit/PostgreSQL tests.
+2. **2C-Foundation:** non-null server-controlled `IsActive` state and migration/backfill; shared validated session policy and session-creation service; RS256 Access JWT issuance with the signed `account_type` claim and role claims loaded from persisted Identity data; initial refresh token + access-token issuance boundary; ASP.NET Core authentication/authorization claim mapping; unit/PostgreSQL tests.
 3. **2C-Customer:** email/mobile password login and verified-mobile OTP request/verify; PostgreSQL transactional SMS outbox, primary/secondary provider failover, expiry-aware retries and uniqueness/anti-enumeration tests.
 4. **2C-Staff:** SuperAdmin provisioning/password management; one-time employee MFA enrollment/reset; password pre-authentication transaction, TOTP verification, replay prevention, account-level MFA lockout and recovery-code consumption.
 5. **2C-Completion:** cookie/CSRF/Origin/CORS integration, authorization policies, Customer/Staff session management including DELETE /sessions all-device revocation and end-to-end tests.
