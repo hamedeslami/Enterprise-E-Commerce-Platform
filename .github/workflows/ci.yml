@@ -32,7 +32,7 @@ jobs:
           --health-retries 10
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://ecommerce:ci-only-password@127.0.0.1:5432/ecommerce_test?schema=public
+      DATABASE_URL: postgresql://ecommerce:ci-only-password@127.0.0.1:5432/ecommerce_test?schema=identity
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +48,12 @@ jobs:
 
       - name: Generate Prisma Client
         run: npm run prisma:generate
+
+      - name: Validate Prisma schema
+        run: npm run prisma:validate
+
+      - name: Apply Prisma migrations to empty PostgreSQL
+        run: npm run prisma:migrate:deploy
 
       - name: Lint
         run: npm run lint
@@ -79,6 +85,23 @@ jobs:
 
       - name: Build and start Docker Compose
         run: docker compose up --build --detach
+
+      - name: Setup Node.js for Compose migration verification
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install migration tooling
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Apply migrations to the Compose PostgreSQL instance
+        env:
+          DATABASE_URL: postgresql://ecommerce:change-this-local-password@127.0.0.1:5432/ecommerce?schema=identity
+        run: npm run prisma:migrate:deploy
 
       - name: Verify liveness, readiness, and OpenAPI
         shell: bash

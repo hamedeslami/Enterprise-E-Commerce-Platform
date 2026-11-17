@@ -5,7 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY . .
-ARG DATABASE_URL=postgresql://build:build-only@127.0.0.1:5432/build?schema=public
+ARG DATABASE_URL=postgresql://build:build-only@127.0.0.1:5432/build?schema=identity
 ENV DATABASE_URL=${DATABASE_URL}
 RUN npm run prisma:generate
 RUN npm run build

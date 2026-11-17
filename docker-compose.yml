@@ -25,7 +25,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 8080
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-local-only-change-me}@postgres:5432/${POSTGRES_DB:-ecommerce}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD:-local-only-change-me}@postgres:5432/${POSTGRES_DB:-ecommerce}?schema=identity
     ports:
       - "8080:8080"
     depends_on:
