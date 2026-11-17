@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "feat/**"
       - "phase-*/**"
   pull_request:
     branches:
@@ -29,25 +30,50 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ecommerce:ci-only-password@127.0.0.1:5432/ecommerce_test?schema=public
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          dotnet-version: 10.0.404
+          node-version: 24
 
-      - name: Restore
-        run: dotnet restore Ecommerce.sln
+      - name: Install dependencies and generate bootstrap lockfile
+        run: npm install --no-audit --no-fund
+
+      - name: Upload generated lockfile for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-bootstrap-package-lock
+          path: package-lock.json
+          if-no-files-found: warn
+          retention-days: 2
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Build
-        run: dotnet build Ecommerce.sln --configuration Release --no-restore
+        run: npm run build
 
-      - name: Test
-        env:
-          TEST_POSTGRES_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=ecommerce_test;Username=ecommerce;Password=ci-only-password;Timeout=5;Command Timeout=5
-        run: dotnet test Ecommerce.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: PostgreSQL-backed HTTP tests
+        run: npm run test:e2e
 
   compose-smoke-test:
     runs-on: ubuntu-latest
@@ -60,21 +86,19 @@ jobs:
         run: cp .env.example .env
 
       - name: Build and start Docker Compose
-        env:
-          POSTGRES_PASSWORD: compose-ci-only-password
         run: docker compose up --build --detach
 
-      - name: Verify API liveness, readiness, and OpenAPI
+      - name: Verify liveness, readiness, and OpenAPI
         shell: bash
         run: |
           set -euo pipefail
 
-          for attempt in {1..30}; do
+          for attempt in {1..45}; do
             if curl --fail --silent http://localhost:8080/health/live; then
               break
             fi
 
-            if [ "$attempt" -eq 30 ]; then
+            if [ "$attempt" -eq 45 ]; then
               echo "API liveness endpoint did not become healthy in time."
               exit 1
             fi
@@ -84,6 +108,29 @@ jobs:
 
           curl --fail --silent http://localhost:8080/health/ready
           curl --fail --silent http://localhost:8080/openapi/v1.json > /dev/null
+
+      - name: Verify readiness fails when PostgreSQL is unavailable
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose stop postgres
+          status="000"
+
+          for attempt in {1..15}; do
+            status="$(curl --silent --output /tmp/readiness.json --write-out '%{http_code}' http://localhost:8080/health/ready || true)"
+            if [ "$status" = "503" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$status" != "503" ]; then
+            echo "Expected readiness HTTP 503 after PostgreSQL stopped; got $status."
+            cat /tmp/readiness.json || true
+            exit 1
+          fi
+
+          curl --fail --silent http://localhost:8080/health/live > /dev/null
 
       - name: Print Compose logs on failure
         if: failure()
