@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { z } from 'zod';
-import { ZodValidationPipe } from './zod-validation.pipe';
+import { ZodValidationPipe } from './zod-validation.pipe.js';
 
 describe('ZodValidationPipe', () => {
   it('returns parsed and transformed values', () => {
@@ -14,6 +14,8 @@ describe('ZodValidationPipe', () => {
   it('rejects invalid input with safe validation details', () => {
     const pipe = new ZodValidationPipe(z.object({ email: z.string().email() }));
 
-    expect(() => pipe.transform({ email: 'invalid' })).toThrow(BadRequestException);
+    expect(() => pipe.transform({ email: 'invalid' })).toThrow(
+      BadRequestException
+    );
   });
 });
