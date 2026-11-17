@@ -155,7 +155,9 @@ export class RefreshTokenService {
         RETURNING idle_expires_at
       `;
       const updatedSession = updatedSessions[0];
-      if (!updatedSession) return { status: 'rejected' };
+      if (!updatedSession) {
+        throw new Error('Refresh token session update invariant failed');
+      }
 
       const successorId = generateUuidV7();
       const successorSecret = createRefreshTokenSecret();
