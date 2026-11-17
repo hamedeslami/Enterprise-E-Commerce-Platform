@@ -5,7 +5,8 @@ import { PrismaService } from '../src/shared/database/prisma.service.js';
 import { generateUuidV7 } from '../src/shared/identifiers/uuidv7.js';
 import {
   formatRefreshToken,
-  hashRefreshTokenSecret
+  hashRefreshTokenSecret,
+  parseRefreshToken
 } from '../src/modules/identity/refresh-tokens/refresh-token.crypto.js';
 import { RefreshTokenService } from '../src/modules/identity/refresh-tokens/refresh-token.service.js';
 
@@ -122,7 +123,12 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
     expect(state.rows).toHaveLength(1);
     expect(state.rows[0].consumed_at).toBeTruthy();
     expect(state.rows[0].replaced_by_token_id).toBeTruthy();
-    expect(state.rows[0].secret_hash).not.toContain(result.refreshToken);
+    const parsedSuccessor = parseRefreshToken(result.refreshToken);
+    expect(parsedSuccessor).not.toBeNull();
+    expect(state.rows[0].secret_hash).toBe(
+      hashRefreshTokenSecret(parsedSuccessor!.secret)
+    );
+    expect(state.rows[0].secret_hash).not.toContain(parsedSuccessor!.secret.toString('base64url'));
     expect(state.rows[0].idle_expires_at.getTime()).toBeGreaterThan(
       before.rows[0].idle_expires_at.getTime() - 1000
     );
