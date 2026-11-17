@@ -79,9 +79,15 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
         'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE id = $1',
         [tokenId]
       );
+      const successorExpiry =
+        state === 'ABSOLUTE_EXPIRED'
+          ? "NOW() - INTERVAL '3 hours'"
+          : state === 'IDLE_EXPIRED'
+            ? "NOW() - INTERVAL '2 minutes'"
+            : "NOW() + INTERVAL '1 day'";
       await pool.query(
         `INSERT INTO identity.refresh_tokens (id, session_id, secret_hash, expires_at)
-         VALUES ($1, $2, $3, NOW() + INTERVAL '1 day')`,
+         VALUES ($1, $2, $3, ${successorExpiry})`,
         [successorId, sessionId, hashRefreshTokenSecret(randomBytes(32))]
       );
       await pool.query(
@@ -187,6 +193,30 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
     expect(consumedPredecessor?.revoked_at).toBeNull();
     expect(revokedSuccessor?.revoked_at).toBeTruthy();
     expect(otherSession.rows[0].revoked_at).toBeNull();
+  });
+
+  it('does not classify a consumed credential as replay after its session expires', async () => {
+    const fixture = await createFixture({
+      sessionState: 'IDLE_EXPIRED',
+      consumed: true,
+      tokenExpired: true
+    });
+
+    await expect(service.rotate(fixture.credential)).rejects.toBeInstanceOf(
+      UnauthorizedException
+    );
+    const session = await pool.query(
+      'SELECT revoked_at, revocation_reason FROM identity.auth_sessions WHERE id = $1',
+      [fixture.sessionId]
+    );
+    const tokens = await pool.query(
+      'SELECT consumed_at, revoked_at FROM identity.refresh_tokens WHERE session_id = $1',
+      [fixture.sessionId]
+    );
+    expect(session.rows[0].revoked_at).toBeNull();
+    expect(session.rows[0].revocation_reason).toBeNull();
+    expect(tokens.rows).toHaveLength(2);
+    expect(tokens.rows.every((row) => row.revoked_at === null)).toBe(true);
   });
 
   it.each(['IDLE_EXPIRED', 'ABSOLUTE_EXPIRED', 'REVOKED'] as const)(
