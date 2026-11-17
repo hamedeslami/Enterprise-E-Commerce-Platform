@@ -166,9 +166,9 @@ model IdentityUserRole {
   assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
   assignedBy String?  @map("assigned_by") @db.Uuid
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedByUser IdentityUser? @relation("UserRoleAssigner", fields: [assignedBy], references: [id], onDelete: SetNull)
-  role IdentityRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_user_roles_user")
+  assignedByUser IdentityUser? @relation("UserRoleAssigner", fields: [assignedBy], references: [id], onDelete: SetNull, map: "fk_identity_user_roles_assigned_by")
+  role IdentityRole @relation(fields: [roleId], references: [id], onDelete: Restrict, map: "fk_identity_user_roles_role")
 
   @@id([userId, roleId])
   @@index([roleId], map: "ix_identity_user_roles_role_id")
@@ -181,8 +181,8 @@ model IdentityRolePermission {
   permissionId String   @map("permission_id") @db.Uuid
   grantedAt    DateTime @default(now()) @map("granted_at") @db.Timestamptz(6)
 
-  role       IdentityRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission IdentityPermission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+  role       IdentityRole       @relation(fields: [roleId], references: [id], onDelete: Cascade, map: "fk_identity_role_permissions_role")
+  permission IdentityPermission @relation(fields: [permissionId], references: [id], onDelete: Restrict, map: "fk_identity_role_permissions_permission")
 
   @@id([roleId, permissionId])
   @@index([permissionId], map: "ix_identity_role_permissions_permission_id")
@@ -205,7 +205,7 @@ model AuthSession {
   userAgentHash     String?                 @map("user_agent_hash") @db.Char(64)
   deviceLabel       String?                 @map("device_label") @db.VarChar(160)
 
-  user          IdentityUser  @relation(fields: [userId, actorKind], references: [id, accountType], onDelete: Restrict)
+  user          IdentityUser  @relation(fields: [userId, actorKind], references: [id, accountType], onDelete: Restrict, map: "fk_identity_auth_sessions_user_actor")
   refreshTokens RefreshToken[]
 
   @@unique([id, userId], map: "ux_identity_sessions_id_user")
@@ -225,8 +225,8 @@ model RefreshToken {
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
   replacedByTokenId String?   @unique(map: "ux_identity_refresh_tokens_replaced_by") @map("replaced_by_token_id") @db.Uuid
 
-  session       AuthSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  replacedBy    RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: Restrict)
+  session       AuthSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "fk_identity_refresh_tokens_session")
+  replacedBy    RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: Restrict, map: "fk_identity_refresh_tokens_replaced_by")
   replaces      RefreshToken? @relation("RefreshTokenRotation")
 
   @@unique([sessionId, id], map: "ux_identity_refresh_tokens_session_id")
@@ -298,7 +298,7 @@ model StaffMfaEnrollmentInvitation {
   createdByUserId String  @map("created_by_user_id") @db.Uuid
 
   user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdByUser IdentityUser @relation("MfaInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdByUser IdentityUser @relation("MfaInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, map: "fk_identity_staff_mfa_enrollment_invitations_created_by")
 
   @@index([userId, createdAt], map: "ix_identity_staff_mfa_invitations_user_created")
   @@index([expiresAt], map: "ix_identity_staff_mfa_invitations_expiry")
@@ -377,7 +377,7 @@ model SmsOutboxMessage {
   createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  challenge CustomerOtpChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  challenge CustomerOtpChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, map: "fk_identity_sms_outbox_challenge")
 
   @@index([status, nextAttemptAt, createdAt], map: "ix_identity_sms_outbox_claim")
   @@index([expiresAt], map: "ix_identity_sms_outbox_expiry")
@@ -413,7 +413,7 @@ model IdentityAuditEvent {
   occurredAt     DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
 
   @@index([actorUserId, occurredAt], map: "ix_identity_audit_actor_occurred")
-  actorUser IdentityUser? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorUser IdentityUser? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull, map: "fk_identity_audit_events_actor")
 
   @@index([targetType, targetId, occurredAt], map: "ix_identity_audit_target_occurred")
   @@map("audit_events")
