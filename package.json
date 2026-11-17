@@ -15,9 +15,9 @@
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "format:check": "prettier --check package.json tsconfig.json tsconfig.build.json nest-cli.json prisma.config.ts eslint.config.mjs jest.config.cjs",
     "typecheck": "tsc --noEmit",
-    "test": "jest --runInBand",
-    "test:unit": "jest --runInBand --testPathIgnorePatterns=health.e2e-spec.ts",
-    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
+    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --testPathIgnorePatterns=health.e2e-spec.ts",
+    "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate"
   },
@@ -54,5 +54,6 @@
     "ts-jest": "29.4.15",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1"
-  }
+  },
+  "type": "module"
 }
