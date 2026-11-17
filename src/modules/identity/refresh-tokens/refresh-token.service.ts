@@ -19,8 +19,12 @@ interface TokenLockRow {
   id: string; session_id: string; secret_hash: string; expires_at: Date;
   consumed_at: Date | null; revoked_at: Date | null;
 }
-interface DatabaseClockRow { database_now: Date; }
-interface SuccessorExpiryRow { idle_expires_at: Date; }
+interface DatabaseClockRow {
+  database_now: Date;
+  session_within_lifetime: boolean;
+  token_unexpired: boolean;
+}
+interface SuccessorExpiryRow { expires_at: Date; }
 
 type RotationTransactionResult =
   | { status: 'rejected' }
@@ -88,15 +92,19 @@ export class RefreshTokenService {
       }
 
       const clocks = await tx.$queryRaw<DatabaseClockRow[]>`
-        SELECT clock_timestamp() AS database_now
+        WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
+        SELECT clock.database_now,
+               s.idle_expires_at > clock.database_now
+                 AND s.absolute_expires_at > clock.database_now AS session_within_lifetime,
+               rt.expires_at > clock.database_now AS token_unexpired
+        FROM clock
+        INNER JOIN identity.auth_sessions AS s ON s.id = ${session.id}::uuid
+        INNER JOIN identity.refresh_tokens AS rt ON rt.id = ${token.id}::uuid
       `;
-      const databaseNow = clocks[0].database_now;
+      const clock = clocks[0];
+      const databaseNow = clock.database_now;
 
-      if (
-        session.revoked_at !== null ||
-        session.idle_expires_at.getTime() <= databaseNow.getTime() ||
-        session.absolute_expires_at.getTime() <= databaseNow.getTime()
-      ) {
+      if (session.revoked_at !== null || !clock.session_within_lifetime) {
         return { status: 'rejected' };
       }
 
@@ -118,7 +126,7 @@ export class RefreshTokenService {
         return { status: 'replay' };
       }
 
-      if (token.revoked_at !== null || token.expires_at.getTime() <= databaseNow.getTime()) {
+      if (token.revoked_at !== null || !clock.token_unexpired) {
         return { status: 'rejected' };
       }
 
@@ -142,7 +150,7 @@ export class RefreshTokenService {
       `;
       if (claimed.length !== 1) return { status: 'rejected' };
 
-      const updatedSessions = await tx.$queryRaw<SuccessorExpiryRow[]>`
+      const updatedSessions = await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE identity.auth_sessions
         SET last_seen_at = ${databaseNow},
             idle_expires_at = LEAST(
@@ -152,7 +160,7 @@ export class RefreshTokenService {
         WHERE id = ${session.id}::uuid AND revoked_at IS NULL
           AND idle_expires_at > ${databaseNow}
           AND absolute_expires_at > ${databaseNow}
-        RETURNING idle_expires_at
+        RETURNING id
       `;
       const updatedSession = updatedSessions[0];
       if (!updatedSession) {
@@ -163,13 +171,15 @@ export class RefreshTokenService {
       const successorSecret = createRefreshTokenSecret();
       const successorHash = hashRefreshTokenSecret(successorSecret);
 
-      await tx.$executeRaw`
+      const successors = await tx.$queryRaw<SuccessorExpiryRow[]>`
         INSERT INTO identity.refresh_tokens (id, session_id, secret_hash, expires_at)
-        VALUES (
-          ${successorId}::uuid, ${session.id}::uuid,
-          ${successorHash}, ${updatedSession.idle_expires_at}
-        )
+        SELECT ${successorId}::uuid, s.id, ${successorHash}, s.idle_expires_at
+        FROM identity.auth_sessions AS s
+        WHERE s.id = ${session.id}::uuid
+        RETURNING expires_at
       `;
+      const successor = successors[0];
+      if (!successor) throw new Error('Refresh token successor insertion invariant failed');
 
       const finalized = await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE identity.refresh_tokens
@@ -188,7 +198,7 @@ export class RefreshTokenService {
         status: 'rotated',
         sessionId: session.id,
         refreshToken: formatRefreshToken(successorId, successorSecret),
-        expiresAt: updatedSession.idle_expires_at
+        expiresAt: successor.expires_at
       };
     });
 
