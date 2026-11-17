@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
+import { configureOpenApi } from '../src/shared/http/openapi.js';
 
 describe('Health endpoints (e2e)', () => {
   let app: INestApplication;
@@ -13,6 +14,7 @@ describe('Health endpoints (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    configureOpenApi(app);
     await app.init();
   });
 
