@@ -8,7 +8,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['**/*.ts'],
-    languageOptions: { globals: globals.node },
+    languageOptions: { globals: { ...globals.node, ...globals.jest } },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
