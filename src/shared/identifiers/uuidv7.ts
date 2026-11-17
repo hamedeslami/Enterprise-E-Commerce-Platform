@@ -15,8 +15,8 @@ export function generateUuidV7(now = Date.now()): string {
     timestamp = Math.floor(timestamp / 256);
   }
 
-  bytes[6] = 0x70 | (bytes[6]! & 0x0f);
-  bytes[8] = 0x80 | (bytes[8]! & 0x3f);
+  bytes[6] = 0x70 | ((bytes[6] ?? 0) & 0x0f);
+  bytes[8] = 0x80 | ((bytes[8] ?? 0) & 0x3f);
 
   const hex = bytes.toString('hex');
   return [
