@@ -23,9 +23,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const requestId = requestContext.getStore()?.requestId;
     const detail = status >= 500
       ? 'An unexpected error occurred.'
-      : exception instanceof HttpException
-        ? this.getSafeDetail(exception)
-        : 'The request could not be completed.';
+      : 'The request could not be completed.';
 
     if (status >= 500) {
       this.logger.error(
@@ -45,17 +43,4 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     });
   }
 
-  private getSafeDetail(exception: HttpException): string {
-    const payload = exception.getResponse();
-
-    if (typeof payload === 'string') return payload;
-    if (
-      typeof payload === 'object' &&
-      payload !== null &&
-      'message' in payload &&
-      typeof payload.message === 'string'
-    ) return payload.message;
-
-    return 'The request could not be completed.';
-  }
 }
