@@ -246,7 +246,7 @@ model StaffMfaTransaction {
   consumedAt     DateTime?                   @map("consumed_at") @db.Timestamptz(6)
   cancelledAt    DateTime?                   @map("cancelled_at") @db.Timestamptz(6)
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_mfa_transactions_user")
 
   @@index([userId, createdAt], map: "ix_identity_staff_mfa_transactions_user_created")
   @@index([expiresAt], map: "ix_identity_staff_mfa_transactions_expiry")
@@ -265,7 +265,7 @@ model StaffAuthenticator {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_authenticators_user")
 
   @@map("staff_authenticators")
   @@schema("identity")
@@ -279,7 +279,7 @@ model StaffRecoveryCode {
   consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
   revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_recovery_codes_user")
 
   @@unique([userId, codeHash], map: "ux_identity_staff_recovery_codes_user_hash")
   @@index([userId, consumedAt, revokedAt], map: "ix_identity_staff_recovery_codes_available")
@@ -297,7 +297,7 @@ model StaffMfaEnrollmentInvitation {
   cancelledAt   DateTime? @map("cancelled_at") @db.Timestamptz(6)
   createdByUserId String  @map("created_by_user_id") @db.Uuid
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_mfa_enrollment_invitations_user")
   createdByUser IdentityUser @relation("MfaInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, map: "fk_identity_staff_mfa_enrollment_invitations_created_by")
 
   @@index([userId, createdAt], map: "ix_identity_staff_mfa_invitations_user_created")
@@ -315,7 +315,7 @@ model StaffMfaEnrollmentTransaction {
   consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(6)
   cancelledAt   DateTime? @map("cancelled_at") @db.Timestamptz(6)
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_mfa_enrollment_transactions_user")
 
   @@index([userId, createdAt], map: "ix_identity_staff_enrollment_transactions_user_created")
   @@index([expiresAt], map: "ix_identity_staff_enrollment_transactions_expiry")
@@ -332,7 +332,7 @@ model StaffPasswordChangeTransaction {
   consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
   cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_password_change_transactions_user")
 
   @@index([userId, createdAt], map: "ix_identity_staff_password_change_transactions_user_created")
   @@index([expiresAt], map: "ix_identity_staff_password_change_transactions_expiry")
@@ -352,7 +352,7 @@ model CustomerOtpChallenge {
   consumedAt     DateTime? @map("consumed_at") @db.Timestamptz(6)
   invalidatedAt  DateTime? @map("invalidated_at") @db.Timestamptz(6)
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_customer_otp_challenges_user")
   outbox SmsOutboxMessage?
 
   @@index([userId, purpose, createdAt], map: "ix_identity_otp_challenges_user_purpose_created")
