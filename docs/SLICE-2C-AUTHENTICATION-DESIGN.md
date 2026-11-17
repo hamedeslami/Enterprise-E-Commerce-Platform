@@ -56,7 +56,7 @@ The enrollment invitation has a maximum 24-hour lifetime; the restricted enrollm
 
 ### Email
 
-- Trim surrounding whitespace and normalize using the configured ASP.NET Core Identity ILookupNormalizer / NormalizeEmail behavior.
+- Trim surrounding whitespace and apply the application's versioned canonical email-normalization function. Do not apply provider-specific dot/plus-tag rewriting. The exact implementation and uniqueness semantics must be covered by tests.
 - Do not remove provider-specific dots or plus-tags.
 - Customer email uniqueness is enforced by PostgreSQL on NormalizedEmail for Customer rows. Application pre-checks are only for user-friendly errors.
 - Email password login requires EmailConfirmed = true.
@@ -140,7 +140,7 @@ MFA verification accepts either a TOTP code or a recovery code. The server resol
 
 ### Account activation state
 
-Add a non-null Boolean `IsActive` column to `identity.AspNetUsers`. It is a server-controlled account lifecycle state, independent of ASP.NET Identity's temporary `LockoutEnd` and independent of `MustChangePassword`. Existing Customer and Staff rows are backfilled to `true` to preserve their current ability to authenticate; the migration must not silently disable existing accounts. Every new-account provisioning path must explicitly choose `IsActive` on the server. Do not accept it from public authentication/profile DTOs, and do not add a database default that hides missing provisioning decisions.
+Add a non-null Boolean `is_active` field to the Prisma user model/table in the `identity` schema. It is a server-controlled account lifecycle state, independent of the application's temporary lockout state and independent of `MustChangePassword`. Existing Customer and Staff rows are backfilled to `true` to preserve their current ability to authenticate; the migration must not silently disable existing accounts. Every new-account provisioning path must explicitly choose `IsActive` on the server. Do not accept it from public authentication/profile DTOs, and do not add a database default that hides missing provisioning decisions.
 
 `IsActive=false` means the account cannot start or complete an authentication ceremony, obtain a session, or rotate a refresh token. OTP/MFA pending transactions for the account must not be usable. A privileged, audited account-deactivation operation must atomically mark the account inactive, invalidate its pending authentication transactions, revoke all active sessions and refresh credentials, and commit as one PostgreSQL transaction. Reactivation is also a privileged, audited state change; it does not restore previously revoked sessions or credentials. Already-issued stateless access JWTs can remain valid only for the bounded residual lifetime accepted by AR-SEC-001 (maximum five minutes plus configured clock skew); do not claim immediate JWT revocation. Add migration, authorization, refresh, pending-transaction, session-revocation and concurrent state-transition tests.
 
@@ -183,7 +183,7 @@ If the database commit succeeds but the HTTP response is lost before the browser
 - Use UTC/database time and enforce IdleExpiresAt <= AbsoluteExpiresAt.
 - Revalidate `ApplicationUser.IsActive == true` at session creation and refresh; never infer activation from lockout state or client input.
 - Load current roles from server-side Identity data; never copy roles or assurance from client/JWT state.
-- Every access JWT contains the server-issued `account_type` claim with exactly one lowercase value: `customer` or `staff`, derived from the persisted `AccountType`. The claim is distinct from role claims; it is never client-supplied and is not a role. Configure ASP.NET Core authorization to require the correct account-type claim as well as the required role/policy for protected endpoints.
+- Every access JWT contains the server-issued `account_type` claim with exactly one lowercase value: `customer` or `staff`, derived from the persisted `AccountType`. The claim is distinct from role claims; it is never client-supplied and is not a role. Configure NestJS guards/policies to require the correct account-type claim as well as the required role/policy for protected endpoints.
 - Access JWT is RS256, maximum five minutes, with approved minimal claims and server-issued role claims.
 - Session and initial refresh-token insertion are atomic. Persist only SHA-256(refresh secret), never the raw secret.
 - No raw access/refresh token in JSON, logs, traces or exceptions.
@@ -198,7 +198,7 @@ Use RFC 6238 with this fixed initial interoperability profile:
 - 30-second time-step.
 - T0 = 0 (Unix epoch).
 - Accept at most one step in the past and one step in the future (±1); do not widen dynamically.
-- Use a cryptographically secure random TOTP secret; encrypt it at rest using the approved Data Protection boundary or a reviewed equivalent. Never return it after enrollment or log it.
+- Use a cryptographically secure random TOTP secret; encrypt it at rest using the application-owned versioned authenticated-encryption boundary; key custody is tracked by TD-MIG-003. Never return it after enrollment or log it.
 - Enrollment remains pending until the first generated code is successfully verified.
 
 Persist LastAcceptedTimeStep per authenticator. A submitted code is valid only if its matching step is greater than LastAcceptedTimeStep. If more than one candidate step matches, select the greatest matching step that is still within the allowed window and greater than the persisted value. Advance the value with a conditional database update or row lock in the same transaction as MFA transaction consumption and session creation. A concurrent duplicate submission must have at most one winner. A code from an already accepted step is rejected even while it remains inside the clock-skew window.
@@ -288,7 +288,7 @@ OTP delivery uses a PostgreSQL-backed transactional outbox owned by the Identity
 
 Creating a Customer OTP challenge, consuming the applicable phone/global quota and inserting its SMS outbox record happen in the same PostgreSQL transaction. The outbox row contains the challenge ID, destination metadata, protected payload, expiry, state, attempt count, next-attempt time and a bounded worker lease. Workers claim rows with database locking/lease semantics (for example, FOR UPDATE SKIP LOCKED) so multiple API/worker instances cannot send the same row concurrently.
 
-The raw OTP is never stored in plaintext. The challenge table stores only its HMAC. The outbox temporarily stores the SMS destination and message body only as authenticated ciphertext protected with a dedicated Data Protection purpose; production key-ring protection and sharing are governed by TD-SEC-001. The worker decrypts only in memory immediately before provider submission. The protected payload is erased as soon as delivery reaches a terminal state or the challenge expires; it is never logged, traced or returned to an API. Delivery metadata may be retained for a short operational period, then terminal outbox rows are purged. Expired pending rows are purged without sending.
+The raw OTP is never stored in plaintext. The challenge table stores only its HMAC. The outbox temporarily stores the SMS destination and message body only as authenticated ciphertext protected with the application-owned versioned authenticated-encryption boundary; production key custody and sharing are governed by TD-MIG-003 and TD-SEC-001. The worker decrypts only in memory immediately before provider submission. The protected payload is erased as soon as delivery reaches a terminal state or the challenge expires; it is never logged, traced or returned to an API. Delivery metadata may be retained for a short operational period, then terminal outbox rows are purged. Expired pending rows are purged without sending.
 
 The outbox expiry is exactly the OTP challenge expiry (initially two minutes). A worker MUST check database time immediately before every provider call and MUST NOT send a message whose challenge has expired, been consumed, or been invalidated by resend. A resend invalidates the previous challenge and its pending outbox work, then creates a new challenge and outbox row atomically. This prevents stale codes from being delivered after a newer challenge exists.
 
@@ -383,7 +383,7 @@ Queue cleanup is mandatory: pending rows are deleted at expiry; protected payloa
 ## 11. Implementation sequence and gates
 
 1. **2C-Design (this document):** approve endpoint, normalization, persistence and ceremony contracts before implementation.
-2. **2C-Foundation:** non-null server-controlled `IsActive` state and migration/backfill; shared validated session policy and session-creation service; RS256 Access JWT issuance with the signed `account_type` claim and role claims loaded from persisted Identity data; initial refresh token + access-token issuance boundary; ASP.NET Core authentication/authorization claim mapping; unit/PostgreSQL tests.
+2. **2C-Foundation:** non-null server-controlled `IsActive` state and migration/backfill; shared validated session policy and session-creation service; RS256 Access JWT issuance with the signed `account_type` claim and role claims loaded from persisted Identity data; initial refresh token + access-token issuance boundary; NestJS authentication guards and authorization claim mapping; unit/PostgreSQL tests.
 3. **2C-Customer:** email/mobile password login and verified-mobile OTP request/verify; PostgreSQL transactional SMS outbox, primary/secondary provider failover, expiry-aware retries and uniqueness/anti-enumeration tests.
 4. **2C-Staff:** SuperAdmin provisioning/password management; one-time employee MFA enrollment/reset; password pre-authentication transaction, TOTP verification, replay prevention, account-level MFA lockout and recovery-code consumption.
 5. **2C-Completion:** cookie/CSRF/Origin/CORS integration, authorization policies, Customer/Staff session management including DELETE /sessions all-device revocation and end-to-end tests.
@@ -394,7 +394,7 @@ Each implementation slice is a separate reviewable PR or an explicitly agreed sm
 ## 12. Explicit non-goals and tracked production gates
 
 No new deferral is created merely by documenting a provider-independent boundary. The initial SMS outbox is PostgreSQL-backed; Redis or a broker is not a prerequisite. Existing gates remain authoritative:
-- TD-SEC-001: production Data Protection key-ring storage/protection.
+- TD-MIG-003 / TD-SEC-001: production application authenticated-encryption key custody and protection.
 - TD-SEC-002: JWT signing-key custody and runtime integration.
 - TD-SEC-003: OTP HMAC secret provisioning/rotation.
 - TD-SEC-004: SMS provider/sender/contract.
