@@ -1,6 +1,6 @@
 # Identity Persistence — Prisma / PostgreSQL
 
-**Status:** M3 persistence baseline plus M4 refresh-rotation implementation in progress. **Runtime:** NestJS 12 / Prisma 7. **Database:** PostgreSQL 18.  
+**Status:** M3 persistence baseline plus M4 refresh-rotation implementation on PR #17; GitHub Actions CI run #442 passed, awaiting owner merge. **Runtime:** NestJS 12 / Prisma 7. **Database:** PostgreSQL 18.  
 **Migration policy:** Fresh development/test database only; no EF migration history or data-copy path is retained.
 
 ## Scope
