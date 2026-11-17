@@ -167,7 +167,7 @@ describe('Identity PostgreSQL persistence', () => {
       pool.query(
         `INSERT INTO identity.refresh_tokens (id, session_id, secret_hash, expires_at)
          VALUES ($1, $2, $3, NOW() + INTERVAL '8 days')`,
-        [generateUuidV7(), randomBytes(32).toString('hex')]
+        [generateUuidV7(), sessionId, randomBytes(32).toString('hex')]
       ),
       '23514'
     );
