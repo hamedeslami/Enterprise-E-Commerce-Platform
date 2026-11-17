@@ -54,7 +54,7 @@ Align architecture, roadmap, progress, technical debt, security, session/token, 
 
 Create the NestJS application; validated configuration; Prisma/PostgreSQL lifecycle; Pino with secret/PII redaction; correlation IDs; safe error/Problem Details mapping; Zod validation Pipe; OpenAPI; liveness/readiness; Docker Compose; GitHub Actions; unit/API tests and PostgreSQL smoke tests.
 
-**Pinned baseline:** Node 24 LTS, NestJS 12.5.1, Nest Swagger 12.1.2, TypeScript 5.9.3, Prisma 7.10.1, PostgreSQL 18, Zod 4.1.12, Pino 10.4.0, Jest 29.7.0, ts-jest 29.4.5 and Supertest 7.1.4.
+**Pinned baseline:** Node 24 LTS, NestJS 12.5.1, Nest Swagger 12.1.2, TypeScript 6.0.3, Prisma 7.10.1, PostgreSQL 18, Zod 4.1.12, Pino 10.4.0, Jest 29.7.0, ts-jest 29.4.15 and Supertest 7.1.4.
 
 **Exit:** clean reproducible install with committed package-lock, lint/format/typecheck/build/tests pass in CI; Compose starts API and PostgreSQL; liveness and real DB readiness pass; readiness returns 503 when PostgreSQL is unavailable; OpenAPI is reachable; logger redaction tests pass; no .NET build is required for the new Foundation.
 
