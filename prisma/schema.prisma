@@ -14,6 +14,14 @@ enum AccountType {
   @@schema("identity")
 }
 
+enum StaffMfaStatus {
+  NOT_ENROLLED
+  ENROLLMENT_PENDING
+  ACTIVE
+
+  @@schema("identity")
+}
+
 enum AuthenticationMethod {
   PASSWORD
   SMS_OTP
@@ -100,6 +108,7 @@ model IdentityUser {
   accessFailedCount        Int         @default(0) @map("access_failed_count")
   lockoutEnd               DateTime?   @map("lockout_end") @db.Timestamptz(6)
   mfaLockoutEnd            DateTime?   @map("mfa_lockout_end") @db.Timestamptz(6)
+  staffMfaStatus            StaffMfaStatus? @map("staff_mfa_status")
   createdAt                DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -112,6 +121,9 @@ model IdentityUser {
   staffEnrollmentTx        StaffMfaEnrollmentTransaction[]
   staffPasswordChanges     StaffPasswordChangeTransaction[]
   customerOtpChallenges    CustomerOtpChallenge[]
+  assignedUserRoles        IdentityUserRole[] @relation("UserRoleAssigner")
+  createdMfaInvitations    StaffMfaEnrollmentInvitation[] @relation("MfaInvitationCreator")
+  auditEvents              IdentityAuditEvent[] @relation("AuditActor")
 
   @@unique([id, accountType], map: "ux_identity_users_id_account_type")
   @@index([normalizedEmail], map: "ix_identity_users_normalized_email")
@@ -155,6 +167,7 @@ model IdentityUserRole {
   assignedBy String?  @map("assigned_by") @db.Uuid
 
   user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedByUser IdentityUser? @relation("UserRoleAssigner", fields: [assignedBy], references: [id], onDelete: SetNull)
   role IdentityRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@id([userId, roleId])
@@ -285,6 +298,7 @@ model StaffMfaEnrollmentInvitation {
   createdByUserId String  @map("created_by_user_id") @db.Uuid
 
   user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdByUser IdentityUser @relation("MfaInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt], map: "ix_identity_staff_mfa_invitations_user_created")
   @@index([expiresAt], map: "ix_identity_staff_mfa_invitations_expiry")
@@ -399,6 +413,8 @@ model IdentityAuditEvent {
   occurredAt     DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
 
   @@index([actorUserId, occurredAt], map: "ix_identity_audit_actor_occurred")
+  actorUser IdentityUser? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
   @@index([targetType, targetId, occurredAt], map: "ix_identity_audit_target_occurred")
   @@map("audit_events")
   @@schema("identity")
