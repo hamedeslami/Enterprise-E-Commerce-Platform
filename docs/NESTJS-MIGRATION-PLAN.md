@@ -1,6 +1,8 @@
 # NestJS Migration Plan
 
-**Status:** Owner-approved migration direction. M1 (architecture and documentation) is in progress. This document does not authorize runtime-code changes.
+**Status:** Owner-approved migration direction. M1 is complete; M2 NestJS Foundation is in progress on an isolated branch.
+**Current implementation branch:** `feat/nestjs-foundation`.
+**Latest verified main baseline:** `338dacf49173108e5aafc8315f46b4212f0d66d0`.
 
 ## Owner decisions
 
@@ -14,10 +16,10 @@
 
 | Concern | Selection |
 |---|---|
-| Runtime/framework | Supported Node.js LTS + NestJS |
+| Runtime/framework | Node.js 24 LTS + NestJS 12 |
 | Language | TypeScript |
 | Database | PostgreSQL 18 |
-| ORM/migrations | Prisma Client + Prisma Migrate |
+| ORM/migrations | Prisma 7 + Prisma Client + Prisma Migrate |
 | Runtime validation | Zod through a small NestJS Pipe |
 | Logging | Pino with tested redaction |
 | Tests | Jest + Supertest |
@@ -27,7 +29,7 @@
 | CI | GitHub Actions |
 | Cache/broker | None initially; Redis only after measured need |
 
-Exact compatible package versions are selected and pinned during M2. Commit the lockfile and use reproducible installs in CI; do not guess package versions in architecture documents.
+Node 26 is not selected for this baseline: Prisma 7's published system requirements list tested Active/Maintenance LTS versions through Node 24. Use a supported LTS line rather than assuming compatibility with a newer Current release. Package versions are pinned in package metadata; the npm lockfile must be committed before M2 acceptance.
 
 ## Migration principles
 
@@ -42,17 +44,21 @@ Exact compatible package versions are selected and pinned during M2. Commit the 
 
 ## Stages and exit criteria
 
-### M1 — Architecture and migration documentation (current)
+### M1 — Architecture and migration documentation (complete)
 
 Align architecture, roadmap, progress, technical debt, security, session/token, Identity, database and API documents with NestJS. Mark framework-specific .NET documents as historical. Record implementation gates.
 
-**Exit:** active design documents consistently describe NestJS/TypeScript/Prisma; no runtime source, database schema or CI workflow is changed.
+**Exit:** active design documents consistently describe NestJS/TypeScript/Prisma; no runtime source, database schema or CI workflow is changed. Merged in PR #13; PR #14 corrected a Markdown typo.
 
-### M2 — NestJS Foundation
+### M2 — NestJS Foundation (in progress)
 
 Create the NestJS application; validated configuration; Prisma/PostgreSQL lifecycle; Pino with secret/PII redaction; correlation IDs; safe error/Problem Details mapping; Zod validation Pipe; OpenAPI; liveness/readiness; Docker Compose; GitHub Actions; unit/API tests and PostgreSQL smoke tests.
 
-**Exit:** clean reproducible install, lint/format/typecheck/build/tests pass in CI; Compose starts API and PostgreSQL; liveness and real DB readiness pass; no .NET build is required for the new Foundation.
+**Pinned baseline:** Node 24 LTS, NestJS 12.5.1, Nest Swagger 12.1.2, TypeScript 5.9.3, Prisma 7.10.1, PostgreSQL 18, Zod 4.1.12, Pino 10.4.0, Jest 29.7.0, ts-jest 29.4.5 and Supertest 7.1.4.
+
+**Exit:** clean reproducible install with committed package-lock, lint/format/typecheck/build/tests pass in CI; Compose starts API and PostgreSQL; liveness and real DB readiness pass; readiness returns 503 when PostgreSQL is unavailable; OpenAPI is reachable; logger redaction tests pass; no .NET build is required for the new Foundation.
+
+M2 deliberately does not implement Identity, authentication, JWT, sessions, OTP, MFA, cookies, CSRF, Catalog or Inventory. No Prisma business models or database migrations are introduced in this stage.
 
 ### M3 — Prisma schema and Identity persistence
 
