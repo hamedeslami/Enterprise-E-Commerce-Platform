@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { HealthService } from './health.service.js';
 
