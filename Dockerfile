@@ -1,8 +1,8 @@
 FROM node:24-alpine AS build
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 ARG DATABASE_URL=postgresql://build:build-only@127.0.0.1:5432/build?schema=public
@@ -13,7 +13,7 @@ RUN npm run build
 FROM node:24-alpine AS production-dependencies
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
