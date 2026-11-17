@@ -76,13 +76,19 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
     if (options.consumed) {
       const successorId = generateUuidV7();
       await pool.query(
+        'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE id = $1',
+        [tokenId]
+      );
+      await pool.query(
         `INSERT INTO identity.refresh_tokens (id, session_id, secret_hash, expires_at)
          VALUES ($1, $2, $3, NOW() + INTERVAL '1 day')`,
         [successorId, sessionId, hashRefreshTokenSecret(randomBytes(32))]
       );
       await pool.query(
         `UPDATE identity.refresh_tokens
-         SET consumed_at = NOW() - INTERVAL '1 minute', replaced_by_token_id = $2
+         SET consumed_at = NOW() - INTERVAL '1 minute',
+             revoked_at = NULL,
+             replaced_by_token_id = $2
          WHERE id = $1`,
         [tokenId, successorId]
       );
