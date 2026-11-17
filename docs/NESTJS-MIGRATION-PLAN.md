@@ -1,8 +1,8 @@
 # NestJS Migration Plan
 
-**Status:** Owner-approved migration direction. M1 is complete; M2 NestJS Foundation is in progress on an isolated branch.
-**Current implementation branch:** `feat/nestjs-foundation`.
-**Latest verified main baseline:** `338dacf49173108e5aafc8315f46b4212f0d66d0`.
+**Status:** Owner-approved migration direction. M1 and M2 are complete; M3 Identity persistence is in progress on an isolated branch.
+**Current implementation branch:** `feat/identity-prisma-persistence` (draft PR #16).
+**Latest verified main baseline:** `071aee4e0e5dca1e9e58d44dc645d8d3a554cc0c`.
 
 ## Owner decisions
 
@@ -50,7 +50,7 @@ Align architecture, roadmap, progress, technical debt, security, session/token, 
 
 **Exit:** active design documents consistently describe NestJS/TypeScript/Prisma; no runtime source, database schema or CI workflow is changed. Merged in PR #13; PR #14 corrected a Markdown typo.
 
-### M2 — NestJS Foundation (in progress)
+### M2 — NestJS Foundation (complete; PR #15 merged)
 
 Create the NestJS application; validated configuration; Prisma/PostgreSQL lifecycle; Pino with secret/PII redaction; correlation IDs; safe error/Problem Details mapping; Zod validation Pipe; OpenAPI; liveness/readiness; Docker Compose; GitHub Actions; unit/API tests and PostgreSQL smoke tests.
 
@@ -58,13 +58,13 @@ Create the NestJS application; validated configuration; Prisma/PostgreSQL lifecy
 
 **Exit:** clean reproducible install with committed package-lock, lint/format/typecheck/build/tests pass in CI; Compose starts API and PostgreSQL; liveness and real DB readiness pass; readiness returns 503 when PostgreSQL is unavailable; OpenAPI is reachable; logger redaction tests pass; no .NET build is required for the new Foundation.
 
-M2 deliberately does not implement Identity, authentication, JWT, sessions, OTP, MFA, cookies, CSRF, Catalog or Inventory. No Prisma business models or database migrations are introduced in this stage.
+M2 deliberately did not implement Identity, authentication, JWT, sessions, OTP, MFA, cookies, CSRF, Catalog or Inventory. No Prisma business models or database migrations were introduced in that stage. The Foundation was merged in PR #15 after clean-install, lint, format, typecheck, build, unit, PostgreSQL E2E and Compose smoke checks passed.
 
 ### M3 — Prisma schema and Identity persistence
 
-Define Prisma models and PostgreSQL schema for users, roles, account type, activation state, sessions and refresh tokens. Recreate UUIDv7 handling, constraints, indexes and partial unique indexes. Create migrations from an empty development/test database. Port behavior and tests, not EF classes or migrations.
+Define Prisma models and PostgreSQL schema for users, Customer/Staff account type and MFA state, roles/permissions, activation/password-change state, sessions, refresh tokens, Staff MFA transactions/authenticators/recovery/enrollment/password-change records, Customer OTP/outbox/quota records and audit events. Add an application UUIDv7 generator, PostgreSQL UUIDv7 checks, partial unique indexes, cross-account constraints and session-bound refresh expiry enforcement. Create a fresh migration from an empty development/test database. Port persistence invariants and tests, not EF classes or migrations. See `IDENTITY-PERSISTENCE-DESIGN.md`.
 
-**Exit:** empty database can be built solely from Prisma migrations; constraints/indexes/nullability match approved contracts; PostgreSQL integration tests pass. No authentication endpoint is implied.
+**Exit:** empty PostgreSQL 18 database can be built solely from Prisma migrations; Prisma schema validates; constraints/indexes/nullability match approved contracts; PostgreSQL integration tests prove both valid and rejected states; Docker Compose migration verification passes. No authentication endpoint or token-rotation service is implied.
 
 ### M4 — Atomic refresh rotation and security regression
 
