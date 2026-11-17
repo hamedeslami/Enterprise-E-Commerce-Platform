@@ -1,9 +1,13 @@
 **/bin
 **/obj
+**/node_modules
+**/dist
+**/coverage
 .git
 .github
 .vs
 .idea
 .vscode
-TestResults
 .env
+.env.*
+!.env.example

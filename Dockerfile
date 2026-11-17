@@ -1,22 +1,29 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
+FROM node:24-alpine AS build
+WORKDIR /app
 
-COPY global.json Directory.Build.props Directory.Packages.props ./
-COPY Ecommerce.sln ./
-COPY src/BuildingBlocks/BuildingBlocks.csproj src/BuildingBlocks/
-COPY src/Modules/Identity/Identity.csproj src/Modules/Identity/
-COPY src/Ecommerce.Api/Ecommerce.Api.csproj src/Ecommerce.Api/
-COPY tests/Ecommerce.UnitTests/Ecommerce.UnitTests.csproj tests/Ecommerce.UnitTests/
-COPY tests/Ecommerce.IntegrationTests/Ecommerce.IntegrationTests.csproj tests/Ecommerce.IntegrationTests/
-RUN dotnet restore Ecommerce.sln
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 COPY . .
-RUN dotnet publish src/Ecommerce.Api/Ecommerce.Api.csproj --configuration Release --no-restore --output /app/publish
+ARG DATABASE_URL=postgresql://build:build-only@127.0.0.1:5432/build?schema=public
+ENV DATABASE_URL=${DATABASE_URL}
+RUN npm run prisma:generate
+RUN npm run build
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM node:24-alpine AS production-dependencies
 WORKDIR /app
-ENV ASPNETCORE_HTTP_PORTS=8080
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+FROM node:24-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build --chown=node:node /app/package.json ./package.json
+
+USER node
 EXPOSE 8080
-COPY --from=build /app/publish .
-USER $APP_UID
-ENTRYPOINT ["dotnet", "Ecommerce.Api.dll"]
+CMD ["node", "dist/main.js"]

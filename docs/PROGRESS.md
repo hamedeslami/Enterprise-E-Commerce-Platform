@@ -1,16 +1,17 @@
 # Project Progress
 
-**Current program:** NestJS migration — M1 (architecture/documentation).
+**Current program:** NestJS migration — M2 (NestJS Foundation) in progress.
 **Target backend:** NestJS + TypeScript + PostgreSQL + Prisma.
-**Owner decisions:** complete .NET replacement; no hybrid backend; existing PostgreSQL data is disposable development/test data and will be recreated from Prisma migrations.
-**Current code status:** the repository still contains the legacy .NET implementation on `main`. No NestJS runtime implementation has been merged yet. The migration branch is documentation-only.
+**Latest verified main:** `338dacf49173108e5aafc8315f46b4212f0d66d0`.
+**Current implementation branch:** `feat/nestjs-foundation`.
+**Current code status:** M1 documentation is complete. M2 Foundation is being implemented on an isolated branch; no NestJS runtime code has been merged to main.
 
 ## Repository
 
 - Repository: https://github.com/hamedeslami/Enterprise-E-Commerce-Platform
-- Latest previously verified main baseline: `9747756ec563a7d33d39de2574a1d8be494b1a90`.
-- Previous PRs #5–#12 are historical .NET implementation/design work; they are not evidence that the NestJS migration has been completed.
-- Current migration work is isolated in `docs/nestjs-migration-plan`; do not merge until the documentation review and CI are complete and the owner approves.
+- PR #13 merged the owner-approved migration architecture and plan.
+- PR #14 merged a one-line documentation correction.
+- Historical PRs #5–#12 document or implement the former .NET baseline; they are not evidence that the NestJS migration is complete.
 
 ## Owner-approved migration decisions
 
@@ -18,31 +19,47 @@
 - Do not run two API backends in parallel as a permanent architecture.
 - PostgreSQL development/test data may be discarded; no production/business data migration is required.
 - Create a new Prisma schema and migration history; do not convert EF Core migrations.
-- PostgreSQL remains the authoritative relational database.
-- Modular Monolith remains the architectural style.
-- UUIDv7 remains the identifier strategy.
-- No Redis, broker, microservices or generic repository framework initially.
-- Zod is the canonical runtime validation system, integrated with NestJS through a small Pipe; do not run class-validator as a parallel system.
+- PostgreSQL remains authoritative for constraints, transactions and concurrency.
+- Modular Monolith; no Redis, broker, microservices or generic repository framework initially.
+- UUIDv7 remains the identifier strategy; identifier implementation is deferred to M3 where it is first needed.
+- Zod is the canonical runtime validation system; do not run class-validator in parallel.
 - Pino is the structured logger and must have tested secret/PII redaction.
 - Jest + Supertest and real PostgreSQL integration tests are the baseline.
 - REST/JSON and OpenAPI remain the API contract.
+
+## Pinned Foundation baseline
+
+| Component | Version |
+|---|---|
+| Node.js | 24 LTS |
+| NestJS core/common/platform | 12.5.1 |
+| NestJS Swagger | 12.1.2 |
+| TypeScript | 6.0.3 |
+| Prisma CLI / Client / PostgreSQL adapter | 7.10.1 |
+| PostgreSQL | 18 |
+| Zod | 4.1.12 |
+| Pino | 10.4.0 |
+| Jest / ts-jest | 29.7.0 / 29.4.15 |
+| Supertest | 7.1.4 |
+
+Node 24 is selected rather than Node 26 because Prisma 7's published system requirements list supported Active/Maintenance LTS lines through Node 24; the project will not use an unverified runtime combination. Exact dependency versions are pinned in package metadata and the generated lockfile is required before M2 acceptance.
 
 ## Migration stage status
 
 | Stage | Scope | Status |
 |---|---|---|
-| M1 | Architecture and migration documentation | In progress |
-| M2 | NestJS Foundation | Not started |
+| M1 | Architecture and migration documentation | Complete |
+| M2 | NestJS Foundation | In progress |
 | M3 | Prisma schema and Identity persistence | Not started |
 | M4 | Atomic refresh rotation and security regression | Not started |
-| M5 | Remove .NET implementation and artifacts | Not started |
+| M5 | Remove legacy .NET implementation and artifacts | Not started |
 | M6 | Resume Identity authentication implementation | Blocked on M1–M5 |
 
-See [NESTJS-MIGRATION-PLAN.md](NESTJS-MIGRATION-PLAN.md) for scope and exit criteria.
+## M2 scope boundary
 
-## Historical .NET baseline
+M2 includes the NestJS host, validated environment configuration, Prisma/PostgreSQL lifecycle, Pino redaction, request correlation, Problem Details errors, Zod pipe, OpenAPI, liveness/readiness, Docker Compose, GitHub Actions and tests.
 
-The previous .NET Foundation was implemented in PR #5; Identity persistence and refresh-token rotation were added in PRs #6–#9; security/authentication design was documented in PRs #7–#12. These remain useful as historical implementation and approved-contract references, but all runtime-specific implementation will be recreated in NestJS. No authentication endpoints, JWT issuance, browser login cookies, OTP challenge worker, Staff MFA enrollment/TOTP or recovery-code flow had been implemented in the previous baseline.
+M2 does not include Identity models, authentication endpoints, JWT, sessions, OTP, MFA, cookies, CSRF, Catalog or Inventory. The existing .NET source remains historical until the separately gated M5 removal.
 
 ## Preserved product and security decisions
 
@@ -50,7 +67,7 @@ The previous .NET Foundation was implemented in PR #5; Identity persistence and 
 - Persian default locale `fa-IR`; store timezone `Asia/Tehran`; persist instants in UTC.
 - Whole-toman monetary model; explicit rounding policy remains open.
 - Customer and Staff are separate persisted account types, independent of roles.
-- Server-controlled `IsActive` state; separate from temporary lockout and `MustChangePassword`.
+- Server-controlled `IsActive`; separate from temporary lockout and `MustChangePassword`.
 - Customer password login requires a verified email or verified mobile; SMS OTP is only for an existing Customer with a previously verified mobile.
 - Staff accounts are provisioned only by SuperAdmin; mandatory TOTP MFA or a single-use recovery code; temporary password change after MFA when required.
 - Access JWT: RS256, unique `kid`, public-key overlap and maximum five-minute lifetime.
