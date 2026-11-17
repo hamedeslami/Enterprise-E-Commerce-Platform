@@ -21,7 +21,7 @@ async function bootstrap(): Promise<void> {
     .build();
   const openApiDocument = SwaggerModule.createDocument(app, openApiConfig);
   SwaggerModule.setup('docs', app, openApiDocument, {
-    jsonDocumentUrl: 'openapi/v1.json'
+    jsonDocumentUrl: '/openapi/v1.json'
   });
 
   app.enableShutdownHooks();
