@@ -1,10 +1,10 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { loadEnvironment } from './shared/config/environment.js';
 import { ProblemDetailsFilter } from './shared/http/problem-details.filter.js';
+import { configureOpenApi } from './shared/http/openapi.js';
 import { AppLogger } from './shared/logging/app-logger.service.js';
 
 async function bootstrap(): Promise<void> {
@@ -13,16 +13,7 @@ async function bootstrap(): Promise<void> {
 
   app.useLogger(app.get(AppLogger));
   app.useGlobalFilters(new ProblemDetailsFilter(app.get(AppLogger)));
-
-  const openApiConfig = new DocumentBuilder()
-    .setTitle('Enterprise E-Commerce API')
-    .setDescription('Backend API foundation')
-    .setVersion('1.0.0')
-    .build();
-  const openApiDocument = SwaggerModule.createDocument(app, openApiConfig);
-  SwaggerModule.setup('docs', app, openApiDocument, {
-    jsonDocumentUrl: '/openapi/v1.json'
-  });
+  configureOpenApi(app);
 
   app.enableShutdownHooks();
   await app.listen(environment.PORT, '0.0.0.0');
