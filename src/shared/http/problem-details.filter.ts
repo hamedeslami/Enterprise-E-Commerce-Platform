@@ -6,8 +6,8 @@ import {
   HttpStatus
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { AppLogger } from '../logging/app-logger.service';
-import { requestContext } from '../request-context/request-context';
+import { AppLogger } from '../logging/app-logger.service.js';
+import { requestContext } from '../request-context/request-context.js';
 
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
@@ -42,5 +42,4 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       ...(requestId ? { requestId } : {})
     });
   }
-
 }
