@@ -243,6 +243,10 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
 
   it('rolls back predecessor claim and session activity when successor insertion fails', async () => {
     const fixture = await createFixture();
+    const before = await pool.query(
+      'SELECT last_seen_at, idle_expires_at FROM identity.auth_sessions WHERE id = $1',
+      [fixture.sessionId]
+    );
     const triggerName = `fail_refresh_successor_${fixture.sessionId.replaceAll('-', '')}`;
     const functionName = `fail_refresh_successor_fn_${fixture.sessionId.replaceAll('-', '')}`;
 
@@ -281,5 +285,7 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
     );
     expect(state.rows[0].consumed_at).toBeNull();
     expect(state.rows[0].revoked_at).toBeNull();
+    expect(state.rows[0].last_seen_at.getTime()).toBe(before.rows[0].last_seen_at.getTime());
+    expect(state.rows[0].idle_expires_at.getTime()).toBe(before.rows[0].idle_expires_at.getTime());
   });
 });
