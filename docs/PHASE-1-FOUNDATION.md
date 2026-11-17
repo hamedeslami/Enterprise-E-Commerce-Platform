@@ -1,6 +1,6 @@
-# Phase 1 — Project Foundation
+# Phase 1 — Project Foundation (Historical .NET Implementation)
 
-**Status:** Implemented and verified in CI; final CI workflow enhancement is awaiting PR #5 merge.
+> **Historical record:** This document describes the original .NET Foundation delivered before the owner approved a complete migration to NestJS. It is retained as historical evidence only. It is not the target architecture and its implementation will be replaced during the NestJS migration. See [NESTJS-MIGRATION-PLAN.md](NESTJS-MIGRATION-PLAN.md).
 
 ## Implemented foundation
 
@@ -31,7 +31,7 @@ Each business module owns its DbContext, EF configurations, schema and migration
 - Module business logic, authentication, catalog, inventory, checkout or payments.
 - Redis, message broker, distributed job framework or generic repository layer.
 
-## Version alignment
+## Historical version alignment
 
 The owner approved moving from .NET 11 to .NET 10 LTS on 2026-11-14. The selected stable baseline is:
 

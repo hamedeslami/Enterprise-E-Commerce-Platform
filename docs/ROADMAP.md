@@ -1,6 +1,19 @@
 # Delivery Roadmap
 
-**Status:** Phase 0 approved. Phase 1 implemented, verified and merged. Phase 2 (Identity and Security) approved and in progress. Complete and verify each phase, report actual results, then wait for explicit user approval before moving on.
+**Status:** NestJS migration approved. M1 (architecture and migration documentation) is in progress on a dedicated branch. The previous .NET Phase 1 foundation and Phase 2 Identity persistence are historical implementation baselines and are scheduled for replacement; authentication implementation has not started in the target NestJS stack. Complete and verify each migration stage, report actual results, then wait for explicit user approval before moving on.
+
+## Migration program — NestJS replacement
+
+The owner approved complete replacement of ASP.NET Core/.NET with NestJS + TypeScript. The existing PostgreSQL data is disposable development/test data; no business data migration is required. The target stack and stage gates are defined in [NESTJS-MIGRATION-PLAN.md](NESTJS-MIGRATION-PLAN.md).
+
+1. **M1 — Architecture/documentation:** align architecture, security, database, Identity and delivery documents with NestJS; no runtime changes.
+2. **M2 — NestJS Foundation:** API host, configuration, Prisma, PostgreSQL, Pino, Zod, error handling, OpenAPI, health checks, Docker and CI.
+3. **M3 — Identity persistence:** new Prisma schema/migrations and PostgreSQL constraints from an empty development/test database.
+4. **M4 — Refresh rotation/security regression:** atomic PostgreSQL rotation and concurrency/security tests.
+5. **M5 — Remove .NET:** delete legacy executable/build artifacts and make NestJS the sole backend.
+6. **M6 — Resume Identity authentication implementation:** continue the approved Phase 2 slices only after migration acceptance.
+
+**Migration rule:** no parallel .NET/NestJS production backends; no EF migration conversion; no destructive production database action. Each stage is a separate reviewable PR and requires owner approval before the next stage.
 
 ## Phase 0 — Architecture and technical design
 
@@ -8,17 +21,17 @@ Deliver ARCHITECTURE.md, DOMAIN-MODEL.md, DATABASE-DESIGN.md, API-DESIGN.md, SEC
 
 **Exit:** user approves design and resolves decisions blocking foundation. **Complete.**
 
-## Phase 1 — Project foundation
+## Phase 1 — Project foundation (legacy .NET baseline)
 
-**Status:** Complete. PR #5 is merged into `main`; GitHub Actions run [#54](https://github.com/hamedeslami/Enterprise-E-Commerce-Platform/actions/runs/43584199385) passed both `build-and-test` and `compose-smoke-test`.
+**Historical status:** The original .NET foundation was implemented and verified in PR #5. It is not the target runtime and will be replaced during M2. Its CI results remain historical evidence only.
 
-Solution/build configuration; API host; options validation; PostgreSQL connection pooling/readiness; structured logging; Problem Details; OpenAPI; Docker Compose; unit/integration tests and CI. First module that owns persisted tables introduces its own DbContext, design-time factory and migration; migrations are applied as a controlled deployment step.
+The NestJS replacement Foundation is tracked as **M2** in the migration program above. Do not treat the old .NET Foundation as completion evidence for M2.
 
-**Exit:** merged and verified. **Complete.**
+**Exit:** M2 must independently satisfy the NestJS Foundation exit criteria.
 
 ## Phase 2 — Identity and security
 
-**Status:** Phase 2 is in progress. Identity persistence (PR #6), approved session/token and browser-security design (PR #7), explicit Customer/Staff classification (PR #8), session/refresh persistence with atomic rotation (PR #9), Slice 2C authentication ceremony design (PR #10) and progress correction (PR #11) are merged. The additional Foundation contract now includes non-null server-controlled `IsActive` account state and the signed JWT `account_type` claim; its documentation review is in progress. Authentication implementation has not started.
+**Status:** Design contracts are approved; prior .NET persistence implementation is historical and will be replaced in M3/M4. Authentication implementation has not started in NestJS. Do not continue implementing Identity on the legacy .NET stack.
 
 - Customer password login using either email or mobile number; the selected identifier must be verified (`EmailConfirmed` or `PhoneNumberConfirmed`).
 - Customer SMS OTP login only to an existing, previously verified mobile number; OTP never creates an account.
@@ -85,7 +98,7 @@ Every deferred decision must be recorded with an ID, reason, closure milestone a
 
 ## Working agreement
 
-For each phase: state scope and decisions, list changed files, implement, run build/tests, report exact results, explain remaining issues, update docs/progress, and wait for approval. Never claim tests passed unless actually run. No fake critical providers or unexplained placeholders.
+For each migration/feature phase: state scope and decisions, list changed files, implement, run build/tests, report exact results, explain remaining issues, update docs/progress, and wait for approval. Never claim tests passed unless actually run. No fake critical providers or unexplained placeholders. Do not merge without explicit owner approval.
 
 ## Decisions deferred to relevant phases
 

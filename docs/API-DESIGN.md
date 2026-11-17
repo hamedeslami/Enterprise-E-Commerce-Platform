@@ -22,7 +22,7 @@ These are illustrative contracts, not a promise every endpoint ships in the firs
 
 - All commerce amounts (product prices, cart/order totals, taxes, discounts, payments and refunds) are whole-toman JSON integers. Fractional toman values are invalid. The API must document the amount unit explicitly; do not label toman with an ISO 4217 currency code.
 - HTTPS outside local development.
-- Explicit JSON DTOs; never serialize EF entities/domain aggregates.
+- Explicit JSON DTOs; never serialize Prisma records/domain aggregates.
 - Correct status codes: 200/201/202/204, 400, 401, 403, 404, 409, 422 where appropriate, 429 and 5xx.
 - RFC 9457 Problem Details with stable application error codes and safe details.
 - Never expose stack traces, SQL, provider secrets or sensitive data.
@@ -35,13 +35,13 @@ Use bounded pagination. Cursor pagination suits large/changing datasets; offset 
 
 ## Validation and authorization
 
-Validate request shape at boundary and enforce business invariants in the owning module. Authorization is deny-by-default at endpoint/use-case level. Check resource ownership server-side for every customer resource. Never accept client userId, role, price, discount, stock, payment status or order owner as authoritative. Admin requires staff permissions; account routes require customer context and ownership.
+Validate request shape at the NestJS boundary using Zod and a small validation Pipe; enforce business invariants again in the owning module. Authorization is deny-by-default at endpoint/use-case level. Check resource ownership server-side for every customer resource. Never accept client userId, role, price, discount, stock, payment status or order owner as authoritative. Admin requires staff permissions; account routes require customer context and ownership.
 
 ## Cookie authentication contract
 
 Access and refresh tokens are separate HttpOnly cookies and are never returned in JSON. API authenticates access cookie; refresh endpoint rotates refresh cookie and issues new access cookie. Cookie Secure, HttpOnly, SameSite, Path, Domain and expiry are configured for the real deployment topology. Do not hardcode a cookie domain. Cross-site cookies require SameSite=None; Secure and CSRF defenses.
 
-Unsafe methods require anti-forgery validation and trusted Origin checks. Define a bootstrap endpoint for anti-forgery token and a documented token cookie/header strategy; exact names and frontend fetch configuration are finalized before integration. CORS uses exact allow-listed origins, never wildcard with credentials.
+Unsafe methods require anti-forgery validation and trusted Origin checks. Use a server-issued synchronizer-token CSRF contract with a safe bootstrap endpoint (initially `GET /api/v1/security/csrf-token`); the request token is kept in frontend memory and sent in `X-CSRF-TOKEN`. Bind it to the browser/session context and independently enforce exact Origin validation. Implementation details are tracked by TD-MIG-002. CORS uses exact allow-listed origins, never wildcard with credentials.
 
 ## Identity authentication policy (Phase 2)
 

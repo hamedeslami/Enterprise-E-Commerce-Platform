@@ -10,15 +10,15 @@ Implement Customer and Staff identity on the API-first Modular Monolith foundati
 
 ### Identity persistence
 
-The Identity module is registered in the API host and uses ASP.NET Core Identity with a module-owned EF Core context and PostgreSQL `identity` schema. User and role constructors generate UUIDv7 identifiers; persistence rejects newly added Identity users or roles whose identifiers are not UUIDv7.
+The previous .NET baseline implemented Identity persistence with ASP.NET Core Identity and EF Core in the PostgreSQL `identity` schema. This implementation is historical and will be replaced in M3 by NestJS application-owned Identity models persisted through Prisma. User and role identifiers remain UUIDv7; the Prisma schema and PostgreSQL constraints must reject invalid identifier strategy.
 
 Initial Identity password/lockout defaults:
 - Minimum password length: 12.
 - Digit and lowercase required; uppercase and non-alphanumeric are not mandatory.
 - Identity lockout: 5 failed attempts and 15 minutes.
-- Identity's global unique normalized-username index remains the Staff username uniqueness boundary. Customer login must not use username as an identifier.
+- A dedicated database uniqueness constraint on the application's canonical Staff username remains the uniqueness boundary. Customer login must not use username as an identifier.
 
-The EF design-time factory, pinned `dotnet-ef` tool, initial migration, Designer and model snapshot are committed. PostgreSQL-backed integration tests apply the migration and verify the schema.
+The EF design-time factory, `dotnet-ef` tool and EF migration history are legacy artifacts and will not be ported. M3 creates a fresh Prisma migration history and verifies it against an empty PostgreSQL database.
 
 ### Account classification
 
@@ -60,9 +60,9 @@ Identifier normalization, database uniqueness, endpoint contracts, session creat
 - Strict refresh replay: a valid consumed-token replay revokes its owning session; no grace period.
 - Customer sessions: 30-day absolute / 7-day idle. Staff sessions: 12-hour absolute / 30-minute idle.
 - Absolute expiry never slides; idle expiry extends only after successful refresh.
-- `IsActive` is a non-null, server-controlled account lifecycle flag, independent of temporary Identity lockout and `MustChangePassword`. Existing accounts are backfilled active; new account creation must explicitly set it. Inactive accounts cannot authenticate, complete pending OTP/MFA, create sessions or refresh. Deactivation atomically invalidates pending authentication transactions and revokes active sessions/refresh credentials; reactivation does not restore them. Already-issued stateless JWTs retain only the bounded residual validity accepted by AR-SEC-001.
+- `IsActive` is a non-null, server-controlled account lifecycle flag, independent of temporary application lockout and `MustChangePassword`. Existing accounts are backfilled active; new account creation must explicitly set it. Inactive accounts cannot authenticate, complete pending OTP/MFA, create sessions or refresh. Deactivation atomically invalidates pending authentication transactions and revokes active sessions/refresh credentials; reactivation does not restore them. Already-issued stateless JWTs retain only the bounded residual validity accepted by AR-SEC-001.
 - Account-sensitive authentication and deactivation use the same database lock order: user → pending OTP/MFA transaction → session rows (stable UUID order) → refresh-token rows. Refresh rotation must adopt user → session → token and revalidate `IsActive` under the user-row lock.
-- Access JWT contains a signed `account_type` claim with exactly `customer` or `staff`, derived from persisted `AccountType`, separate from role claims. Authorization policies enforce both account type and role; no per-request Identity lookup is introduced.
+- Access JWT contains a signed `account_type` claim with exactly `customer` or `staff`, derived from persisted `AccountType`, separate from role claims. Authorization policies enforce both account type and role; no per-request database lookup is introduced.
 - Access and refresh credentials are separate HttpOnly cookies; never return raw tokens in JSON or place them in browser storage, URLs or logs.
 - Enforce antiforgery request-token validation and independent exact-Origin validation for unsafe cookie-authenticated requests.
 - Browser topology: `https://shop.com`, `https://panel.shop.com`, `https://api.shop.com`; exact credentialed CORS allow-list and host-only API cookies.
@@ -104,7 +104,7 @@ Each slice is separately reviewable. Do not proceed to the next slice until the 
 
 ## Deferred choices
 
-The authoritative register and closure evidence are in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). Existing production gates include Data Protection key-ring storage/protection, JWT signing-key custody, OTP HMAC secret provisioning/rotation, SMS provider/contract, production TLS/origins/cookies, WAF/trusted proxy, distributed rate-limiting decision, backup/DR and privacy retention. Provider selection alone does not close a gate.
+The authoritative register and closure evidence are in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md). Existing production gates include application authenticated-encryption key custody, JWT signing-key custody, OTP HMAC secret provisioning/rotation, SMS provider/contract, production TLS/origins/cookies, WAF/trusted proxy, distributed rate-limiting decision, backup/DR and privacy retention. Provider selection alone does not close a gate.
 
 
 ## Slice 2C design review resolution
