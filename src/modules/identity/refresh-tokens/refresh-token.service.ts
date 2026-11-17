@@ -22,7 +22,6 @@ interface TokenLockRow {
   consumed_at: Date | null; revoked_at: Date | null;
 }
 interface DatabaseClockRow {
-  database_now: Date;
   session_within_lifetime: boolean;
   token_unexpired: boolean;
 }
@@ -99,8 +98,7 @@ export class RefreshTokenService {
 
       const clocks = await tx.$queryRaw<DatabaseClockRow[]>`
         WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
-        SELECT clock.database_now,
-               s.idle_expires_at > clock.database_now
+        SELECT s.idle_expires_at > clock.database_now
                  AND s.absolute_expires_at > clock.database_now AS session_within_lifetime,
                rt.expires_at > clock.database_now AS token_unexpired
         FROM clock
@@ -108,7 +106,6 @@ export class RefreshTokenService {
         INNER JOIN identity.refresh_tokens AS rt ON rt.id = ${token.id}::uuid
       `;
       const clock = clocks[0];
-      const databaseNow = clock.database_now;
 
       if (session.revoked_at !== null || !clock.session_within_lifetime) {
         return { status: 'rejected' };
@@ -119,13 +116,13 @@ export class RefreshTokenService {
       if (token.consumed_at !== null) {
         await tx.$executeRaw`
           UPDATE identity.auth_sessions
-          SET revoked_at = ${databaseNow},
+          SET revoked_at = clock_timestamp(),
               revocation_reason = 'REFRESH_REPLAY'::identity."SessionRevocationReason"
           WHERE id = ${session.id}::uuid AND revoked_at IS NULL
         `;
         await tx.$executeRaw`
           UPDATE identity.refresh_tokens
-          SET revoked_at = ${databaseNow}
+          SET revoked_at = clock_timestamp()
           WHERE session_id = ${session.id}::uuid
             AND consumed_at IS NULL AND revoked_at IS NULL
         `;
@@ -140,34 +137,38 @@ export class RefreshTokenService {
       // The transaction inserts the successor and then finalizes the predecessor
       // as consumed+replaced. No intermediate state can be committed.
       const claimed = await tx.$queryRaw<Array<{ id: string }>>`
+        WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
         UPDATE identity.refresh_tokens AS rt
-        SET revoked_at = ${databaseNow}
+        SET revoked_at = clock.database_now
+        FROM clock
         WHERE rt.id = ${token.id}::uuid
           AND rt.session_id = ${session.id}::uuid
           AND rt.consumed_at IS NULL AND rt.revoked_at IS NULL
-          AND rt.expires_at > ${databaseNow}
+          AND rt.expires_at > clock.database_now
           AND EXISTS (
             SELECT 1 FROM identity.auth_sessions AS s
             WHERE s.id = rt.session_id AND s.revoked_at IS NULL
-              AND s.idle_expires_at > ${databaseNow}
-              AND s.absolute_expires_at > ${databaseNow}
+              AND s.idle_expires_at > clock.database_now
+              AND s.absolute_expires_at > clock.database_now
           )
         RETURNING rt.id
       `;
       if (claimed.length !== 1) return { status: 'rejected' };
 
       const updatedSessions = await tx.$queryRaw<Array<{ id: string }>>`
-        UPDATE identity.auth_sessions
-        SET last_seen_at = ${databaseNow},
+        WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
+        UPDATE identity.auth_sessions AS s
+        SET last_seen_at = clock.database_now,
             idle_expires_at = LEAST(
-              ${databaseNow}::timestamptz + (idle_expires_at - last_seen_at),
-              absolute_expires_at
+              clock.database_now + (s.idle_expires_at - s.last_seen_at),
+              s.absolute_expires_at
             )
-        WHERE id = ${session.id}::uuid AND revoked_at IS NULL
-          AND idle_expires_at > last_seen_at
-          AND idle_expires_at > ${databaseNow}
-          AND absolute_expires_at > ${databaseNow}
-        RETURNING id
+        FROM clock
+        WHERE s.id = ${session.id}::uuid AND s.revoked_at IS NULL
+          AND s.idle_expires_at > s.last_seen_at
+          AND s.idle_expires_at > clock.database_now
+          AND s.absolute_expires_at > clock.database_now
+        RETURNING s.id
       `;
       const updatedSession = updatedSessions[0];
       if (!updatedSession) {
@@ -190,7 +191,7 @@ export class RefreshTokenService {
 
       const finalized = await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE identity.refresh_tokens
-        SET consumed_at = ${databaseNow},
+        SET consumed_at = clock_timestamp(),
             revoked_at = NULL,
             replaced_by_token_id = ${successorId}::uuid
         WHERE id = ${token.id}::uuid AND session_id = ${session.id}::uuid
