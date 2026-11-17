@@ -1,7 +1,7 @@
 # NestJS Migration Plan
 
-**Status:** Owner-approved migration direction. M1–M3 are merged; M4 Atomic Refresh Token Rotation is in progress on an isolated branch.
-**Current implementation branch:** `feat/atomic-refresh-token-rotation` (M4 PR pending CI review).
+**Status:** Owner-approved migration direction. M1–M3 are merged; M4 Atomic Refresh Token Rotation is implemented and CI-verified on PR #17, awaiting owner merge.
+**Current implementation branch:** `feat/atomic-refresh-token-rotation`.
 **Latest verified main baseline:** `f06ad9af7650bbdc2354bdd02b6e315c4addc053`.
 
 ## Owner decisions
@@ -70,9 +70,9 @@ Define Prisma models and PostgreSQL schema for users, Customer/Staff account typ
 
 Reimplement rotation with PostgreSQL transactions and explicit SQL as required. Enforce the approved lock order: owning user → pending authentication transaction (where applicable) → session rows in stable UUID order → refresh-token rows. Preserve constant-time secret verification, database-time expiry, conditional consumption, successor insertion and strict replay revocation.
 
-**Implementation in progress:** versioned opaque credential parsing, SHA-256 hash-at-rest, constant-time secret verification, explicit READ COMMITTED transaction, User → AuthSession → RefreshToken locks, database-clock expiry, strict replay revocation, bounded idle sliding and atomic predecessor/successor replacement. PostgreSQL tests cover success, wrong secret, unknown token, token/session expiry, inactive user, replay, concurrent duplicate use and rollback on successor insertion failure.
+**Implementation complete on PR #17:** versioned opaque credential parsing, SHA-256 hash-at-rest, constant-time secret verification, explicit READ COMMITTED transaction, User → AuthSession → RefreshToken locks, database-clock expiry, strict replay revocation, bounded idle sliding and atomic predecessor/successor replacement. PostgreSQL tests cover success, wrong secret, unknown token, token/session expiry, inactive user, replay, expired-session replay rejection, concurrent duplicate use, user-before-session lock ordering under a revocation race and rollback on successor insertion failure.
 
-**Exit:** all required tests and CI jobs pass against PostgreSQL; transaction/lock-order review is complete; no replay grace period is introduced. TD-MIG-004 remains open until that evidence is verified.
+**Verification:** GitHub Actions CI run #442 passed both build-and-test and Docker Compose smoke-test jobs. TD-MIG-004 is closed for M4; pending-auth transaction lock-order verification is tracked separately as TD-MIG-008 for M6. No replay grace period is introduced.
 
 ### M5 — Remove legacy .NET implementation
 
