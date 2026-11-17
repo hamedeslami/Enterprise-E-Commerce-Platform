@@ -160,7 +160,7 @@ Authentication-method mapping:
 
 ### Required atomicity
 
-For Customer OTP and Staff MFA completion, the following state changes MUST commit or roll back together in one PostgreSQL transaction using the same IdentityDbContext/connection:
+For Customer OTP and Staff MFA completion, the following state changes MUST commit or roll back together in one PostgreSQL transaction using the same Prisma transaction client/connection:
 
 1. Lock and revalidate the OTP challenge or Staff MFA transaction.
 2. For Staff TOTP, atomically advance the authenticator's last accepted time-step; for recovery, atomically consume the selected recovery code.
