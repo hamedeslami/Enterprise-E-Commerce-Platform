@@ -1,6 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS "identity";
 
 CREATE TYPE "identity"."AccountType" AS ENUM ('CUSTOMER', 'STAFF');
+CREATE TYPE "identity"."StaffMfaStatus" AS ENUM ('NOT_ENROLLED', 'ENROLLMENT_PENDING', 'ACTIVE');
 CREATE TYPE "identity"."AuthenticationMethod" AS ENUM ('PASSWORD', 'SMS_OTP', 'PASSWORD_TOTP', 'PASSWORD_RECOVERY_CODE');
 CREATE TYPE "identity"."SessionRevocationReason" AS ENUM ('LOGOUT', 'SIGN_OUT_ALL', 'PASSWORD_CHANGED', 'PASSWORD_RESET', 'ACCOUNT_DISABLED', 'MFA_RESET', 'REFRESH_REPLAY', 'ADMINISTRATIVE', 'SECURITY_EVENT', 'EXPIRED');
 CREATE TYPE "identity"."StaffMfaTransactionPurpose" AS ENUM ('STAFF_SIGN_IN_MFA');
@@ -28,6 +29,7 @@ CREATE TABLE "identity"."users" (
   "access_failed_count" INTEGER NOT NULL DEFAULT 0,
   "lockout_end" TIMESTAMPTZ(6),
   "mfa_lockout_end" TIMESTAMPTZ(6),
+  "staff_mfa_status" "identity"."StaffMfaStatus",
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updated_at" TIMESTAMPTZ(6) NOT NULL,
   CONSTRAINT "users_pkey" PRIMARY KEY ("id"),
@@ -35,7 +37,8 @@ CREATE TABLE "identity"."users" (
   CONSTRAINT "ck_identity_users_normalized_user_name" CHECK ("normalized_user_name" <> '' AND "normalized_user_name" = btrim("normalized_user_name")),
   CONSTRAINT "ck_identity_users_normalized_email" CHECK ("normalized_email" IS NULL OR ("normalized_email" <> '' AND "normalized_email" = btrim("normalized_email"))),
   CONSTRAINT "ck_identity_users_phone_number" CHECK ("phone_number" IS NULL OR "phone_number" ~ '^\\+989[0-9]{9}$'),
-  CONSTRAINT "ck_identity_users_access_failed_count" CHECK ("access_failed_count" >= 0)
+  CONSTRAINT "ck_identity_users_access_failed_count" CHECK ("access_failed_count" >= 0),
+  CONSTRAINT "ck_identity_users_staff_mfa_status" CHECK (("account_type" = 'CUSTOMER' AND "staff_mfa_status" IS NULL) OR ("account_type" = 'STAFF' AND "staff_mfa_status" IS NOT NULL))
 );
 CREATE UNIQUE INDEX "ux_identity_users_normalized_user_name" ON "identity"."users"("normalized_user_name");
 CREATE UNIQUE INDEX "ux_identity_users_id_account_type" ON "identity"."users"("id", "account_type");
