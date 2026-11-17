@@ -36,7 +36,7 @@ CREATE TABLE "identity"."users" (
   CONSTRAINT "ck_identity_users_id_uuidv7" CHECK (uuid_extract_version("id") = 7),
   CONSTRAINT "ck_identity_users_normalized_user_name" CHECK ("normalized_user_name" <> '' AND "normalized_user_name" = btrim("normalized_user_name")),
   CONSTRAINT "ck_identity_users_normalized_email" CHECK ("normalized_email" IS NULL OR ("normalized_email" <> '' AND "normalized_email" = btrim("normalized_email"))),
-  CONSTRAINT "ck_identity_users_phone_number" CHECK ("phone_number" IS NULL OR "phone_number" ~ '^\\+989[0-9]{9}$'),
+  CONSTRAINT "ck_identity_users_phone_number" CHECK ("phone_number" IS NULL OR "phone_number" ~ '^\+989[0-9]{9}$'),
   CONSTRAINT "ck_identity_users_access_failed_count" CHECK ("access_failed_count" >= 0),
   CONSTRAINT "ck_identity_users_staff_mfa_status" CHECK (("account_type" = 'CUSTOMER' AND "staff_mfa_status" IS NULL) OR ("account_type" = 'STAFF' AND "staff_mfa_status" IS NOT NULL))
 );
@@ -193,6 +193,7 @@ CREATE TABLE "identity"."staff_mfa_enrollment_invitations" (
   "id" UUID NOT NULL,
   "user_id" UUID NOT NULL,
   "token_hash" CHAR(64) NOT NULL,
+  "purpose" "identity"."StaffMfaEnrollmentPurpose" NOT NULL DEFAULT 'STAFF_MFA_ENROLLMENT',
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "expires_at" TIMESTAMPTZ(6) NOT NULL,
   "consumed_at" TIMESTAMPTZ(6),
@@ -253,7 +254,7 @@ CREATE TABLE "identity"."customer_otp_challenges" (
   "invalidated_at" TIMESTAMPTZ(6),
   CONSTRAINT "customer_otp_challenges_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "ck_identity_customer_otp_challenges_id_uuidv7" CHECK (uuid_extract_version("id") = 7),
-  CONSTRAINT "ck_identity_customer_otp_challenges_phone" CHECK ("phone_number" ~ '^\\+989[0-9]{9}$'),
+  CONSTRAINT "ck_identity_customer_otp_challenges_phone" CHECK ("phone_number" ~ '^\+989[0-9]{9}$'),
   CONSTRAINT "ck_identity_customer_otp_challenges_mac" CHECK ("code_mac" ~ '^[0-9a-f]{64}$'),
   CONSTRAINT "ck_identity_customer_otp_challenges_attempts" CHECK ("failed_attempts" >= 0),
   CONSTRAINT "fk_identity_customer_otp_challenges_user" FOREIGN KEY ("user_id") REFERENCES "identity"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE
