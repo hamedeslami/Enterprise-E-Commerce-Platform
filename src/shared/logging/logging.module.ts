@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
-import { AppLogger, APP_LOGGER } from './app-logger.service';
-import { createAppLogger } from './logger.factory';
+import { AppLogger, APP_LOGGER } from './app-logger.service.js';
+import { createAppLogger } from './logger.factory.js';
 
 @Global()
 @Module({
