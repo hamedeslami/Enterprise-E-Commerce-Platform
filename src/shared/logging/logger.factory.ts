@@ -1,4 +1,4 @@
-import { requestContext } from '../request-context/request-context';
+import { requestContext } from '../request-context/request-context.js';
 import pino, {
   type DestinationStream,
   type Logger,
