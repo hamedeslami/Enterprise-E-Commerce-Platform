@@ -34,10 +34,15 @@ CREATE TABLE "identity"."users" (
   "updated_at" TIMESTAMPTZ(6) NOT NULL,
   CONSTRAINT "users_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "ck_identity_users_id_uuidv7" CHECK (uuid_extract_version("id") = 7),
+  CONSTRAINT "ck_identity_users_user_name" CHECK ("user_name" <> '' AND "user_name" = btrim("user_name")),
   CONSTRAINT "ck_identity_users_normalized_user_name" CHECK ("normalized_user_name" <> '' AND "normalized_user_name" = btrim("normalized_user_name")),
   CONSTRAINT "ck_identity_users_normalized_email" CHECK ("normalized_email" IS NULL OR ("normalized_email" <> '' AND "normalized_email" = btrim("normalized_email"))),
   CONSTRAINT "ck_identity_users_phone_number" CHECK ("phone_number" IS NULL OR "phone_number" ~ '^\+989[0-9]{9}$'),
   CONSTRAINT "ck_identity_users_access_failed_count" CHECK ("access_failed_count" >= 0),
+  CONSTRAINT "ck_identity_users_confirmed_email" CHECK (NOT "email_confirmed" OR "normalized_email" IS NOT NULL),
+  CONSTRAINT "ck_identity_users_confirmed_phone" CHECK (NOT "phone_number_confirmed" OR "phone_number" IS NOT NULL),
+  CONSTRAINT "ck_identity_users_customer_password_change" CHECK ("account_type" <> 'CUSTOMER' OR "must_change_password" = false),
+  CONSTRAINT "ck_identity_users_staff_mfa_lockout" CHECK ("account_type" = 'STAFF' OR "mfa_lockout_end" IS NULL),
   CONSTRAINT "ck_identity_users_staff_mfa_status" CHECK (("account_type" = 'CUSTOMER' AND "staff_mfa_status" IS NULL) OR ("account_type" = 'STAFF' AND "staff_mfa_status" IS NOT NULL))
 );
 CREATE UNIQUE INDEX "ux_identity_users_normalized_user_name" ON "identity"."users"("normalized_user_name");
@@ -110,7 +115,7 @@ CREATE TABLE "identity"."auth_sessions" (
   CONSTRAINT "auth_sessions_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "ck_identity_auth_sessions_id_uuidv7" CHECK (uuid_extract_version("id") = 7),
   CONSTRAINT "ck_identity_auth_sessions_idle_expiry" CHECK ("idle_expires_at" <= "absolute_expires_at"),
-  CONSTRAINT "ck_identity_auth_sessions_revocation" CHECK (("revoked_at" IS NULL AND "revocation_reason" IS NULL) OR ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_identity_auth_sessions_revocation" CHECK (("revoked_at" IS NULL AND "revocation_reason" IS NULL) OR ("revoked_at" IS NOT NULL AND "revocation_reason" IS NOT NULL)),
   CONSTRAINT "fk_identity_auth_sessions_user_actor" FOREIGN KEY ("user_id", "actor_kind") REFERENCES "identity"."users"("id", "account_type") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 CREATE UNIQUE INDEX "ux_identity_sessions_id_user" ON "identity"."auth_sessions"("id", "user_id");
@@ -364,8 +369,19 @@ BEGIN
   FROM "identity"."users"
   WHERE "id" = NEW."user_id";
 
-  IF TG_TABLE_NAME = 'customer_otp_challenges' AND actual_type <> 'CUSTOMER' THEN
-    RAISE EXCEPTION 'OTP challenges are restricted to Customer accounts' USING ERRCODE = '23514';
+  IF TG_TABLE_NAME = 'customer_otp_challenges' THEN
+    IF actual_type <> 'CUSTOMER' THEN
+      RAISE EXCEPTION 'OTP challenges are restricted to Customer accounts' USING ERRCODE = '23514';
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM "identity"."users" u
+      WHERE u."id" = NEW."user_id"
+        AND u."is_active" = true
+        AND u."phone_number_confirmed" = true
+        AND u."phone_number" = NEW."phone_number"
+    ) THEN
+      RAISE EXCEPTION 'Customer OTP requires the active account verified mobile number' USING ERRCODE = '23514';
+    END IF;
   END IF;
 
   IF TG_TABLE_NAME IN (
