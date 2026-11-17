@@ -2,10 +2,10 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module';
-import { loadEnvironment } from './shared/config/environment';
-import { ProblemDetailsFilter } from './shared/http/problem-details.filter';
-import { AppLogger } from './shared/logging/app-logger.service';
+import { AppModule } from './app.module.js';
+import { loadEnvironment } from './shared/config/environment.js';
+import { ProblemDetailsFilter } from './shared/http/problem-details.filter.js';
+import { AppLogger } from './shared/logging/app-logger.service.js';
 
 async function bootstrap(): Promise<void> {
   const environment = loadEnvironment();
