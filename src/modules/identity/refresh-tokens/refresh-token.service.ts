@@ -158,6 +158,7 @@ export class RefreshTokenService {
               absolute_expires_at
             )
         WHERE id = ${session.id}::uuid AND revoked_at IS NULL
+          AND idle_expires_at > last_seen_at
           AND idle_expires_at > ${databaseNow}
           AND absolute_expires_at > ${databaseNow}
         RETURNING id
