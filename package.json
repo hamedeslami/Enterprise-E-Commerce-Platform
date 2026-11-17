@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "API-first single-vendor e-commerce backend",
-  "engines": { "node": ">=24 <25", "npm": ">=10" },
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=10"
+  },
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
@@ -48,8 +51,8 @@
     "prettier": "3.6.2",
     "prisma": "7.10.1",
     "supertest": "7.1.4",
-    "ts-jest": "29.4.5",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.46.4"
+    "ts-jest": "29.4.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
   }
 }
