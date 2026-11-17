@@ -1,10 +1,20 @@
 # Project Progress
 
-**Current program:** NestJS migration — M3 (Prisma Identity persistence) in progress.
+**Current program:** NestJS migration — M4 (Atomic Refresh Token Rotation) in progress.
 **Target backend:** NestJS + TypeScript + PostgreSQL + Prisma.
-**Latest verified main:** `071aee4e0e5dca1e9e58d44dc645d8d3a554cc0c`.
-**Current implementation branch:** `feat/identity-prisma-persistence`.
-**Current code status:** M1 and M2 are merged to main. M3 Identity persistence is being implemented on an isolated branch in draft PR #16; no Identity schema/migration has been merged to main.
+**Latest verified main baseline:** `f06ad9af7650bbdc2354bdd02b6e315c4addc053` (M3 merged).
+**Current implementation branch:** `feat/atomic-refresh-token-rotation`.
+**Current code status:** M1–M3 are merged to main. M4 implementation is complete on PR #17 and all CI jobs pass; M4 has not been merged to main.
+
+## M4 — Atomic Refresh Token Rotation (in progress)
+
+- Implemented versioned opaque refresh-token parsing, 256-bit secret generation, SHA-256 hash-at-rest and constant-time verification.
+- Implemented the NestJS refresh-token service with explicit READ COMMITTED transactions and User → AuthSession → RefreshToken row locking.
+- Implemented database-clock expiry checks, strict consumed-token replay revocation, idle-expiry sliding bounded by absolute expiry, and atomic predecessor/successor replacement.
+- The PostgreSQL partial unique index and consumed/replaced check constraint require a transaction-local temporary predecessor revocation before successor insertion; the service finalizes the predecessor and clears the temporary revoked state before commit. Any failure throws and rolls back.
+- Added PostgreSQL integration coverage for rotation, wrong secret, unknown token, expired token/session, inactive user, strict replay, expired-session replay rejection, concurrent duplicate requests, user-before-session lock ordering under a revocation race, and successor-insert rollback.
+- No login endpoint, JWT issuance, cookie/CSRF implementation or logout endpoint is included.
+- **Verification:** GitHub Actions CI run #442 passed both jobs: clean PostgreSQL migration, lint, formatting, typecheck, build, unit tests, PostgreSQL integration tests, Docker Compose build/migration, liveness/readiness/OpenAPI and readiness-failure checks. TD-MIG-004 is closed for M4; TD-MIG-008 tracks pending-auth lock-order tests required before M6.
 
 ## Repository
 
