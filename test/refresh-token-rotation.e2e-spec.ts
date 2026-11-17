@@ -275,6 +275,73 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
     );
   });
 
+  it('acquires the user lock before the session lock under concurrent revocation', async () => {
+    const fixture = await createFixture();
+    const blocker = await pool.connect();
+    let transactionOpen = false;
+
+    try {
+      await blocker.query('BEGIN');
+      transactionOpen = true;
+      await blocker.query(
+        'SELECT id FROM identity.users WHERE id = $1 FOR UPDATE',
+        [fixture.userId]
+      );
+
+      const rotationOutcome = service.rotate(fixture.credential).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error })
+      );
+
+      const deadline = Date.now() + 5000;
+      let waitingForUserLock = false;
+      while (Date.now() < deadline) {
+        const activity = await pool.query<{ waiting: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM pg_stat_activity
+             WHERE pid <> pg_backend_pid()
+               AND datname = current_database()
+               AND wait_event_type = 'Lock'
+               AND query LIKE '%FROM identity.users%'
+               AND query LIKE '%FOR UPDATE%'
+           ) AS waiting`
+        );
+        if (activity.rows[0].waiting) {
+          waitingForUserLock = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(waitingForUserLock).toBe(true);
+
+      // If refresh had locked the session before requesting the user row,
+      // this statement would deadlock against the blocked refresh transaction.
+      await blocker.query(
+        'SELECT id FROM identity.auth_sessions WHERE id = $1 FOR UPDATE',
+        [fixture.sessionId]
+      );
+      await blocker.query(
+        `UPDATE identity.auth_sessions
+         SET revoked_at = NOW(), revocation_reason = 'LOGOUT'
+         WHERE id = $1`,
+        [fixture.sessionId]
+      );
+      await blocker.query('COMMIT');
+      transactionOpen = false;
+
+      const outcome = await rotationOutcome;
+      if (!('error' in outcome)) {
+        throw new Error('Refresh unexpectedly succeeded after session revocation');
+      }
+      expect(outcome.error).toBeInstanceOf(UnauthorizedException);
+    } catch (error) {
+      if (transactionOpen) await blocker.query('ROLLBACK');
+      throw error;
+    } finally {
+      blocker.release();
+    }
+  });
+
   it('rolls back predecessor claim and session activity when successor insertion fails', async () => {
     const fixture = await createFixture();
     const before = await pool.query(
