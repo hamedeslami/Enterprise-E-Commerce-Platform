@@ -4,7 +4,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags
 } from '@nestjs/swagger';
-import { HealthService } from './health.service';
+import { HealthService } from './health.service.js';
 
 @ApiTags('health')
 @Controller('health')
