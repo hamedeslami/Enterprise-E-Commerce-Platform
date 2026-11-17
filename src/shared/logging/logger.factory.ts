@@ -1,3 +1,4 @@
+import { requestContext } from '../request-context/request-context';
 import pino, {
   type DestinationStream,
   type Logger,
@@ -25,7 +26,11 @@ export function createAppLogger(level = 'info', destination?: DestinationStream)
   const options: LoggerOptions = {
     level,
     timestamp: pino.stdTimeFunctions.isoTime,
-    redact: { paths: SENSITIVE_LOG_PATHS, censor: '[REDACTED]' }
+    redact: { paths: SENSITIVE_LOG_PATHS, censor: '[REDACTED]' },
+    mixin() {
+      const context = requestContext.getStore();
+      return context ? { requestId: context.requestId } : {};
+    }
   };
 
   return destination ? pino(options, destination) : pino(options);
