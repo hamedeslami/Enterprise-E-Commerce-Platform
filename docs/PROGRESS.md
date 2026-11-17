@@ -1,10 +1,10 @@
 # Project Progress
 
-**Current program:** NestJS migration — M2 (NestJS Foundation) in progress.
+**Current program:** NestJS migration — M3 (Prisma Identity persistence) in progress.
 **Target backend:** NestJS + TypeScript + PostgreSQL + Prisma.
-**Latest verified main:** `338dacf49173108e5aafc8315f46b4212f0d66d0`.
-**Current implementation branch:** `feat/nestjs-foundation`.
-**Current code status:** M1 documentation is complete. M2 Foundation is being implemented on an isolated branch; no NestJS runtime code has been merged to main.
+**Latest verified main:** `071aee4e0e5dca1e9e58d44dc645d8d3a554cc0c`.
+**Current implementation branch:** `feat/identity-prisma-persistence`.
+**Current code status:** M1 and M2 are merged to main. M3 Identity persistence is being implemented on an isolated branch in draft PR #16; no Identity schema/migration has been merged to main.
 
 ## Repository
 
@@ -21,7 +21,7 @@
 - Create a new Prisma schema and migration history; do not convert EF Core migrations.
 - PostgreSQL remains authoritative for constraints, transactions and concurrency.
 - Modular Monolith; no Redis, broker, microservices or generic repository framework initially.
-- UUIDv7 remains the identifier strategy; identifier implementation is deferred to M3 where it is first needed.
+- UUIDv7 remains the identifier strategy; M3 adds an application generator and PostgreSQL 18 UUID-version constraints.
 - Zod is the canonical runtime validation system; do not run class-validator in parallel.
 - Pino is the structured logger and must have tested secret/PII redaction.
 - Jest + Supertest and real PostgreSQL integration tests are the baseline.
@@ -49,11 +49,15 @@ Node 24 is selected rather than Node 26 because Prisma 7's published system requ
 | Stage | Scope | Status |
 |---|---|---|
 | M1 | Architecture and migration documentation | Complete |
-| M2 | NestJS Foundation | In progress |
-| M3 | Prisma schema and Identity persistence | Not started |
+| M2 | NestJS Foundation | Complete (PR #15 merged) |
+| M3 | Prisma schema and Identity persistence | In progress (draft PR #16) |
 | M4 | Atomic refresh rotation and security regression | Not started |
 | M5 | Remove legacy .NET implementation and artifacts | Not started |
 | M6 | Resume Identity authentication implementation | Blocked on M1–M5 |
+
+## M3 implementation scope
+
+M3 adds Prisma Identity persistence and a fresh PostgreSQL migration: users, account types, roles/permissions, sessions, refresh-token records, Staff MFA persistence, Customer OTP/outbox persistence and audit events. It includes PostgreSQL constraints/triggers and integration tests. It does not implement authentication endpoints, password hashing, JWT issuance, refresh rotation, OTP/TOTP ceremonies, SMS workers, cookies, CSRF or authorization guards.
 
 ## M2 scope boundary
 
