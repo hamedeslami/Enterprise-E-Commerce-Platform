@@ -1,9 +1,9 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { DatabaseModule } from './shared/database/database.module';
-import { HealthController } from './shared/health/health.controller';
-import { HealthService } from './shared/health/health.service';
-import { LoggingModule } from './shared/logging/logging.module';
-import { RequestContextMiddleware } from './shared/request-context/request-context.middleware';
+import { DatabaseModule } from './shared/database/database.module.js';
+import { HealthController } from './shared/health/health.controller.js';
+import { HealthService } from './shared/health/health.service.js';
+import { LoggingModule } from './shared/logging/logging.module.js';
+import { RequestContextMiddleware } from './shared/request-context/request-context.middleware.js';
 
 @Module({
   imports: [DatabaseModule, LoggingModule],
