@@ -19,7 +19,8 @@
     "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --testPathIgnorePatterns=health.e2e-spec.ts",
     "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "prisma:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@nestjs/common": "12.5.1",
