@@ -1,11 +1,11 @@
 # Identity Persistence — Prisma / PostgreSQL
 
-**Status:** M3 implementation baseline. **Runtime:** NestJS 12 / Prisma 7. **Database:** PostgreSQL 18.  
+**Status:** M3 persistence baseline plus M4 refresh-rotation implementation in review. **Runtime:** NestJS 12 / Prisma 7. **Database:** PostgreSQL 18.  
 **Migration policy:** Fresh development/test database only; no EF migration history or data-copy path is retained.
 
 ## Scope
 
-This document describes the persistence boundary only. It does not implement authentication ceremonies, password hashing, token issuance/rotation, OTP verification, TOTP, cookies, CSRF, authorization guards or SMS delivery workers.
+This document describes the Identity persistence boundary and the M4 refresh-rotation service. It does not implement login/authentication ceremonies, password hashing, JWT issuance, OTP verification, TOTP, HTTP authentication endpoints, cookies, CSRF, authorization guards or SMS delivery workers.
 
 All persisted identifiers are application-generated UUIDv7 values. The application helper is `generateUuidV7()`; PostgreSQL 18 checks `uuid_extract_version(id) = 7` on every entity primary key. The generator writes the 48-bit Unix-millisecond timestamp, version and RFC variant bits, and fills the remaining random bits using Node's cryptographic random source. UUIDv7 is an identifier format, not an authorization control.
 
@@ -47,7 +47,7 @@ Only a SHA-256 hash of the 256-bit secret is persisted. The database enforces:
 - token expiry no later than its owning session's absolute or current idle expiry, using a PostgreSQL trigger;
 - successor token belongs to the same session.
 
-The M4 service must still implement the approved user → session → token row-lock order, constant-time secret comparison, database-time expiry, conditional consumption, atomic successor insertion and strict replay revocation. Schema constraints alone do not implement refresh rotation.
+The M4 service implements the approved User → AuthSession → RefreshToken row-lock order at explicit READ COMMITTED isolation, constant-time SHA-256 secret verification, one PostgreSQL clock value for expiry decisions, conditional predecessor claiming, atomic successor insertion/finalization and strict replay revocation. The partial unique active-token index requires a transaction-local temporary predecessor revocation before successor insertion; the predecessor is finalized as consumed/replaced with RevokedAt cleared before commit. A failure after the temporary claim throws and rolls back the complete transaction. The service returns the successor credential only after commit; it does not issue JWTs or expose an HTTP endpoint.
 
 ## Staff MFA persistence
 
@@ -92,7 +92,7 @@ The migration must not be run against a production database. Development/test re
 
 ## Deferred implementation gates
 
-- **M4 / TD-MIG-004:** transaction boundaries, row locks, refresh rotation, replay, rollback and concurrency tests.
+- **M4 / TD-MIG-004:** refresh rotation service and PostgreSQL regression tests are implemented on an isolated branch; TD-MIG-004 remains open until CI and review evidence pass.
 - **Before first auth endpoint / TD-MIG-001:** password hashing algorithm, parameters, versioned format and rehash policy.
 - **Before production TOTP/outbox / TD-MIG-003 and TD-SEC-001:** AEAD construction, key custody, rotation and recovery.
 - **Before monetary/BIGINT APIs / TD-MIG-005:** exact TypeScript and JSON representation.
