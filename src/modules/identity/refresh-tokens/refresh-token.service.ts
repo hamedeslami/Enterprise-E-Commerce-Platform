@@ -9,6 +9,8 @@ import {
   verifyRefreshTokenSecret
 } from './refresh-token.crypto.js';
 
+const DUMMY_SECRET_HASH = '0'.repeat(64);
+
 interface TokenOwnerRow { session_id: string; user_id: string; secret_hash: string; }
 interface UserLockRow { id: string; is_active: boolean; }
 interface SessionLockRow {
@@ -53,7 +55,11 @@ export class RefreshTokenService {
       LIMIT 1
     `;
     const owner = owners[0];
-    if (!owner || !verifyRefreshTokenSecret(parsed.secret, owner.secret_hash)) {
+    const secretMatches = verifyRefreshTokenSecret(
+      parsed.secret,
+      owner?.secret_hash ?? DUMMY_SECRET_HASH
+    );
+    if (!owner || !secretMatches) {
       throw this.unauthorized();
     }
 
