@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
 import type { Logger } from 'pino';
-import { createAppLogger } from './logger.factory';
+import { createAppLogger } from './logger.factory.js';
 
 describe('createAppLogger', () => {
   it('redacts authentication secrets and sensitive request headers', async () => {
@@ -22,18 +22,26 @@ describe('createAppLogger', () => {
       totpSecret: 'totp-secret',
       recoveryCode: 'recovery-secret',
       protectedPayload: 'encrypted-payload',
-      req: { headers: {
-        authorization: 'Bearer access-secret',
-        cookie: 'session=refresh-secret'
-      }}
+      req: {
+        headers: {
+          authorization: 'Bearer access-secret',
+          cookie: 'session=refresh-secret'
+        }
+      }
     }, 'redaction-test');
 
     await new Promise<void>((resolve) => setImmediate(resolve));
     const output = chunks.join('');
 
     for (const secret of [
-      'plain-password', '123456', 'access-secret', 'refresh-secret',
-      'csrf-secret', 'totp-secret', 'recovery-secret', 'encrypted-payload',
+      'plain-password',
+      '123456',
+      'access-secret',
+      'refresh-secret',
+      'csrf-secret',
+      'totp-secret',
+      'recovery-secret',
+      'encrypted-payload',
       'session='
     ]) {
       expect(output).not.toContain(secret);
