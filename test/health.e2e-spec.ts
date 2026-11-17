@@ -45,7 +45,7 @@ describe('Health endpoints (e2e)', () => {
       .get('/openapi/v1.json')
       .expect(200);
 
-    expect(response.body.openapi).toMatch(/^3\\./);
+    expect(response.body.openapi.startsWith('3.')).toBe(true);
     expect(response.body.paths['/health/live']).toBeDefined();
   });
 });
