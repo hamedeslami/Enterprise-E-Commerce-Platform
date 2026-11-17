@@ -124,11 +124,9 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
     expect(state.rows[0].consumed_at).toBeTruthy();
     expect(state.rows[0].replaced_by_token_id).toBeTruthy();
     const parsedSuccessor = parseRefreshToken(result.refreshToken);
-    expect(parsedSuccessor).not.toBeNull();
-    expect(state.rows[0].secret_hash).toBe(
-      hashRefreshTokenSecret(parsedSuccessor!.secret)
-    );
-    expect(state.rows[0].secret_hash).not.toContain(parsedSuccessor!.secret.toString('base64url'));
+    if (!parsedSuccessor) throw new Error('Generated successor token did not parse');
+    expect(state.rows[0].secret_hash).toBe(hashRefreshTokenSecret(parsedSuccessor.secret));
+    expect(state.rows[0].secret_hash).not.toContain(parsedSuccessor.secret.toString('base64url'));
     expect(state.rows[0].idle_expires_at.getTime()).toBeGreaterThan(
       before.rows[0].idle_expires_at.getTime() - 1000
     );
