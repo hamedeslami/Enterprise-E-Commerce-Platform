@@ -112,12 +112,12 @@ model IdentityUser {
   createdAt                DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  userRoles                IdentityUserRole[]
+  userRoles                IdentityUserRole[] @relation("UserRoleOwner")
   sessions                 AuthSession[]
   staffMfaTransactions     StaffMfaTransaction[]
   staffAuthenticator       StaffAuthenticator?
   staffRecoveryCodes       StaffRecoveryCode[]
-  staffMfaInvitations      StaffMfaEnrollmentInvitation[]
+  staffMfaInvitations      StaffMfaEnrollmentInvitation[] @relation("MfaInvitationTarget")
   staffEnrollmentTx        StaffMfaEnrollmentTransaction[]
   staffPasswordChanges     StaffPasswordChangeTransaction[]
   customerOtpChallenges    CustomerOtpChallenge[]
@@ -166,7 +166,7 @@ model IdentityUserRole {
   assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
   assignedBy String?  @map("assigned_by") @db.Uuid
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_user_roles_user")
+  user IdentityUser @relation("UserRoleOwner", fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_user_roles_user")
   assignedByUser IdentityUser? @relation("UserRoleAssigner", fields: [assignedBy], references: [id], onDelete: SetNull, map: "fk_identity_user_roles_assigned_by")
   role IdentityRole @relation(fields: [roleId], references: [id], onDelete: Restrict, map: "fk_identity_user_roles_role")
 
@@ -297,7 +297,7 @@ model StaffMfaEnrollmentInvitation {
   cancelledAt   DateTime? @map("cancelled_at") @db.Timestamptz(6)
   createdByUserId String  @map("created_by_user_id") @db.Uuid
 
-  user IdentityUser @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_mfa_enrollment_invitations_user")
+  user IdentityUser @relation("MfaInvitationTarget", fields: [userId], references: [id], onDelete: Cascade, map: "fk_identity_staff_mfa_enrollment_invitations_user")
   createdByUser IdentityUser @relation("MfaInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict, map: "fk_identity_staff_mfa_enrollment_invitations_created_by")
 
   @@index([userId, createdAt], map: "ix_identity_staff_mfa_invitations_user_created")
