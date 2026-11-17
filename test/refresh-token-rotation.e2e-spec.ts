@@ -181,7 +181,11 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
 
     expect(revoked.rows[0].revocation_reason).toBe('REFRESH_REPLAY');
     expect(revoked.rows[0].revoked_at).toBeTruthy();
-    expect(family.rows.every((row) => row.revoked_at !== null)).toBe(true);
+    expect(family.rows).toHaveLength(2);
+    const consumedPredecessor = family.rows.find((row) => row.revoked_at === null);
+    const revokedSuccessor = family.rows.find((row) => row.revoked_at !== null);
+    expect(consumedPredecessor?.revoked_at).toBeNull();
+    expect(revokedSuccessor?.revoked_at).toBeTruthy();
     expect(otherSession.rows[0].revoked_at).toBeNull();
   });
 
