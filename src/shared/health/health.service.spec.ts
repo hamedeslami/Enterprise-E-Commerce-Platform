@@ -5,7 +5,7 @@ import { HealthService } from './health.service.js';
 describe('HealthService', () => {
   it('reports readiness only after a successful database query', async () => {
     const prisma = {
-      $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }])
+      $queryRaw: jest.fn(async () => [{ '?column?': 1 }])
     };
     const service = new HealthService(prisma as never);
 
@@ -18,7 +18,9 @@ describe('HealthService', () => {
 
   it('fails readiness when PostgreSQL is unavailable', async () => {
     const prisma = {
-      $queryRaw: jest.fn().mockRejectedValue(new Error('connection refused'))
+      $queryRaw: jest.fn(async () => {
+        throw new Error('connection refused');
+      })
     };
     const service = new HealthService(prisma as never);
 
