@@ -130,7 +130,7 @@ Do not accept client-supplied roles, permissions, user IDs or assurance values. 
 
 ### Authorization model (approved: JWT claims)
 
-Authorization is based on claims minted by the API after successful authentication. The client cannot submit or override roles, permissions, account type, or authentication assurance. The initial implementation will place server-authoritative role claims in the access JWT. ASP.NET Core authorization policies map policy requirements to those role claims; do not duplicate an expansive permission catalog into every token. API authorization policies evaluate the signed claims without a per-request Identity database lookup. If later requirements introduce user-specific permission grants that cannot be represented by role claims, that is a separate design change.
+Authorization is based on claims minted by the API after successful authentication. The client cannot submit or override roles, permissions, account type, or authentication assurance. The initial implementation will place server-authoritative role claims in the access JWT. NestJS authorization guards/policies map policy requirements to those role claims; do not duplicate an expansive permission catalog into every token. API authorization policies evaluate the signed claims without a per-request Identity database lookup. If later requirements introduce user-specific permission grants that cannot be represented by role claims, that is a separate design change.
 
 This deliberately accepts bounded authorization staleness: a role-assignment change does not alter an already-issued JWT. With the approved 5-minute access-token lifetime, the normal maximum stale-role window is the remaining lifetime of that JWT, plus only the explicitly configured JWT clock-skew allowance. Refresh must issue claims from current server-side account/role data, not copy claims from the previous token. Do not lengthen access-token lifetime to improve performance without revisiting this decision.
 
@@ -150,7 +150,7 @@ Validate signature, a fixed allow-list containing only the configured `RS256` al
 - Define named ownership for key creation, activation, rotation, emergency compromise response and recovery in deployment/runbook documentation. Key backup or recovery material must be protected independently; a compromised private key must be retired, not restored as trusted.
 - In Production, startup must fail closed if no valid active signing key and corresponding verification configuration are available. Do not generate an ephemeral replacement key automatically, because that can invalidate tokens unpredictably and conceal deployment errors.
 - Local development may use a developer-local key or .NET User Secrets. Development keys must never be reused in staging or production.
-- Do not reuse the ASP.NET Core Data Protection key ring as the JWT signing-key store. These are separate cryptographic purposes and lifecycles.
+- Do not reuse the application authenticated-encryption key as the JWT signing-key store. These are separate cryptographic purposes and lifecycles.
 
 The API extracts the access JWT from the configured access cookie. Do not also accept it from query strings. Whether non-browser bearer clients are supported is a separate API-client decision and must not weaken browser CSRF policy.
 
@@ -245,7 +245,7 @@ A `__Host-` cookie prefix is a strong option when the deployment can satisfy its
 
 #### CSRF bootstrap and validation
 
-- Use ASP.NET Core antiforgery's **cookie token + request token** pattern (synchronizer-style request token), not a naive client-generated double-submit value. The antiforgery cookie is issued by the API and remains HttpOnly; the request token is returned in JSON by a dedicated safe bootstrap endpoint, initially `GET /api/v1/security/csrf-token`.
+- Use a server-issued **synchronizer-token** CSRF pattern, not a naive client-generated double-submit value. The API issues a CSRF bootstrap response from a safe endpoint, initially `GET /api/v1/security/csrf-token`; the request token is bound to the authenticated browser/session context, kept in frontend memory and sent in `X-CSRF-TOKEN`. The implementation is NestJS-specific but the security contract is framework-independent; see TD-MIG-002.
 - The bootstrap response must be `Cache-Control: no-store`, must be served only to the exact configured frontend Origins, and must not create an authenticated session or grant authorization. Browser clients call it with credentials enabled and keep the returned request token in memory only.
 - Every unsafe cookie-authenticated request sends the request token in `X-CSRF-TOKEN`. The API validates the request-token/antiforgery-cookie pair and independently validates that the request Origin exactly matches the allow-list (`https://shop.com`, `https://panel.shop.com` in production). Missing Origin, untrusted Origin, missing token or invalid token is rejected; do not fall back to Referer as an authorization substitute.
 - Apply this to customer/staff password login, OTP request/verify, staff MFA completion/cancellation, refresh, logout, session listing/revocation when cookie-authenticated, and all other unsafe cookie-authenticated routes. Safe bootstrap/read-only requests do not mutate authentication state.
@@ -258,15 +258,15 @@ A `__Host-` cookie prefix is a strong option when the deployment can satisfy its
 Keep distinct key material and purposes:
 - JWT signing private key / verification public keys.
 - OTP HMAC secret.
-- TOTP secret-encryption protection (ASP.NET Core Data Protection or a reviewed equivalent).
-- Data Protection key ring for Identity providers and protected application payloads.
+- TOTP secret encryption using the application-owned versioned authenticated-encryption boundary.
+- Application authenticated-encryption key material for TOTP and protected outbox payloads.
 - Refresh tokens and MFA transaction secrets generated with a cryptographic RNG; only their hashes persist.
 
-Secrets and key rings must be external to source control, access-controlled, backed up and rotated with a documented recovery plan. Production Data Protection keys must be persistent and shared by API instances that need to unprotect the same payloads. The exact provider remains a tracked decision under TD-SEC-001 in docs/TECHNICAL-DEBT.md; it is a production blocker, not an untracked future task.
+Secrets and key rings must be external to source control, access-controlled, backed up and rotated with a documented recovery plan. Production encryption keys must be persistent and available to authorized API/worker instances that need to decrypt the same payloads. The exact key custody and rotation mechanism remains tracked by TD-MIG-003 and TD-SEC-001 in docs/TECHNICAL-DEBT.md; it is a production blocker, not an untracked future task.
 
-### Data Protection deployment policy (approved)
+### Application authenticated-encryption deployment policy (approved)
 
-- Production Data Protection must use a persistent key ring shared by every API instance that needs to protect/unprotect the same payloads.
+- Production authenticated encryption must use a versioned key set available to every authorized API/worker instance that needs to protect/unprotect the same payloads.
 - Set one explicit, stable ApplicationName for this application across those instances. Keep Development, Staging and Production key rings isolated.
 - Protect key-ring material at rest with an independently managed certificate or KMS-backed mechanism; restrict read/write access to the API workload and authorized operators.
 - Define protected backup, restore, rotation and compromise-recovery procedures. Losing the key ring can make previously protected payloads unrecoverable; backup restoration must be rehearsed.
@@ -316,13 +316,13 @@ Secrets and key rings must be external to source control, access-controlled, bac
 4. **Access-token lifetime:** the initial target and maximum are 5 minutes. Configuration may lower but must not raise this limit without a separately reviewed security decision.
 5. **Session duration:** customers 30-day absolute / 7-day idle; staff 12-hour absolute / 30-minute idle. Keep configurable. Absolute expiry never slides.
 6. **Browser topology and cookie baseline:** `shop.com`, `panel.shop.com`, `api.shop.com`; host-only HttpOnly cookies, Secure in production, SameSite=Lax, exact-origin credentialed CORS and independent CSRF/Origin validation.
-7. **Staff MFA cookie and CSRF contract:** issue a five-minute, host-only `__Host-staff-mfa` HttpOnly/Secure/SameSite=Lax cookie containing an opaque transaction credential; it grants only completion/cancellation of that pending MFA transaction. Use ASP.NET Core antiforgery cookie + JSON request-token bootstrap (`GET /api/v1/security/csrf-token`), keep request tokens in frontend memory, send them in `X-CSRF-TOKEN`, and independently enforce exact Origin validation for every unsafe cookie-authenticated request. Refresh the antiforgery request token after authentication state changes.
+7. **Staff MFA cookie and CSRF contract:** issue a five-minute, host-only `__Host-staff-mfa` HttpOnly/Secure/SameSite=Lax cookie containing an opaque transaction credential; it grants only completion/cancellation of that pending MFA transaction. Use the NestJS synchronizer-token CSRF contract with JSON request-token bootstrap (`GET /api/v1/security/csrf-token`), keep request tokens in frontend memory, send them in `X-CSRF-TOKEN`, and independently enforce exact Origin validation for every unsafe cookie-authenticated request. Refresh the antiforgery request token after authentication state changes.
 8. **Session management UX and device metadata:** customers can view their own sessions with coarse device/browser label, creation time, last successful refresh and authentication method; IP is not shown. Customers can revoke other sessions while preserving the current one, or explicitly sign out all devices. Staff session revocation by another staff member requires a dedicated security-administration permission and audit event. Metadata is informational, not an authentication factor.
 9. **JWT signing and key lifecycle:** use RSA/RS256 with a minimum 3072-bit private key, unique `kid`, active/previous public-key overlap during rotation, private-key isolation, and fail-closed production startup.
 
 
 ### Remaining decisions / implementation prerequisites
 
-1. **Data Protection deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
+1. **Application authenticated-encryption deployment:** choose persistent shared key-ring storage and its at-rest protection for production.
 
-Production Data Protection storage and at-rest protection must be selected, implemented and verified before production deployment or before enabling production features that depend on protected payloads. This deployment choice does **not** block provider-independent authentication implementation or local development: use isolated developer-local/test key material, keep the production configuration fail-closed, and do not ship a production fallback to ephemeral or container-local keys. All other implementation contracts in this document remain subject to review and the normal phase approval process.
+Production application encryption-key storage and at-rest protection must be selected, implemented and verified before production deployment or before enabling production features that depend on protected payloads. This deployment choice does **not** block provider-independent authentication implementation or local development: use isolated developer-local/test key material, keep the production configuration fail-closed, and do not ship a production fallback to ephemeral or container-local keys. All other implementation contracts in this document remain subject to review and the normal phase approval process.
