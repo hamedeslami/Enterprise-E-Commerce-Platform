@@ -61,9 +61,12 @@ describe('Atomic refresh token rotation (PostgreSQL)', () => {
       [sessionId, userId, state]
     );
 
-    const tokenExpiresAt = options.tokenExpired
-      ? "NOW() - INTERVAL '1 minute'"
-      : "NOW() + INTERVAL '1 day'";
+    const tokenExpiresAt =
+      state === 'ABSOLUTE_EXPIRED'
+        ? "NOW() - INTERVAL '3 hours'"
+        : state === 'IDLE_EXPIRED' || options.tokenExpired
+          ? "NOW() - INTERVAL '2 minutes'"
+          : "NOW() + INTERVAL '1 day'";
     await pool.query(
       `INSERT INTO identity.refresh_tokens (id, session_id, secret_hash, expires_at)
        VALUES ($1, $2, $3, ${tokenExpiresAt})`,
