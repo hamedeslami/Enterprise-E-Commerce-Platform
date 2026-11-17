@@ -1,9 +1,11 @@
 import { ServiceUnavailableException } from '@nestjs/common';
-import { HealthService } from './health.service';
+import { HealthService } from './health.service.js';
 
 describe('HealthService', () => {
   it('reports readiness only after a successful database query', async () => {
-    const prisma = { $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]) };
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }])
+    };
     const service = new HealthService(prisma as never);
 
     await expect(service.checkReadiness()).resolves.toEqual({
@@ -14,7 +16,9 @@ describe('HealthService', () => {
   });
 
   it('fails readiness when PostgreSQL is unavailable', async () => {
-    const prisma = { $queryRaw: jest.fn().mockRejectedValue(new Error('connection refused')) };
+    const prisma = {
+      $queryRaw: jest.fn().mockRejectedValue(new Error('connection refused'))
+    };
     const service = new HealthService(prisma as never);
 
     await expect(service.checkReadiness()).rejects.toBeInstanceOf(
