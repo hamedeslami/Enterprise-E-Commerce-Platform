@@ -114,12 +114,19 @@ export class RefreshTokenService {
       // A consumed credential is checked before its own expiry, but only while
       // the owning session remains active.
       if (token.consumed_at !== null) {
-        await tx.$executeRaw`
-          UPDATE identity.auth_sessions
-          SET revoked_at = clock_timestamp(),
+        const revokedSessions = await tx.$queryRaw<Array<{ id: string }>>`
+          WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
+          UPDATE identity.auth_sessions AS s
+          SET revoked_at = clock.database_now,
               revocation_reason = 'REFRESH_REPLAY'::identity."SessionRevocationReason"
-          WHERE id = ${session.id}::uuid AND revoked_at IS NULL
+          FROM clock
+          WHERE s.id = ${session.id}::uuid AND s.revoked_at IS NULL
+            AND s.idle_expires_at > clock.database_now
+            AND s.absolute_expires_at > clock.database_now
+          RETURNING s.id
         `;
+        if (revokedSessions.length !== 1) return { status: 'rejected' };
+
         await tx.$executeRaw`
           UPDATE identity.refresh_tokens
           SET revoked_at = clock_timestamp()
