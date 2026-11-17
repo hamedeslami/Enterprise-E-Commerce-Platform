@@ -34,12 +34,12 @@
 | Node.js | 24 LTS |
 | NestJS core/common/platform | 12.5.1 |
 | NestJS Swagger | 12.1.2 |
-| TypeScript | 5.9.3 |
+| TypeScript | 6.0.3 |
 | Prisma CLI / Client / PostgreSQL adapter | 7.10.1 |
 | PostgreSQL | 18 |
 | Zod | 4.1.12 |
 | Pino | 10.4.0 |
-| Jest / ts-jest | 29.7.0 / 29.4.5 |
+| Jest / ts-jest | 29.7.0 / 29.4.15 |
 | Supertest | 7.1.4 |
 
 Node 24 is selected rather than Node 26 because Prisma 7's published system requirements list supported Active/Maintenance LTS lines through Node 24; the project will not use an unverified runtime combination. Exact dependency versions are pinned in package metadata and the generated lockfile is required before M2 acceptance.
