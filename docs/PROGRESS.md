@@ -14,7 +14,7 @@
 - The PostgreSQL partial unique index and consumed/replaced check constraint require a transaction-local temporary predecessor revocation before successor insertion; the service finalizes the predecessor and clears the temporary revoked state before commit. Any failure throws and rolls back.
 - Added PostgreSQL integration coverage for rotation, wrong secret, unknown token, expired token/session, inactive user, strict replay, concurrent duplicate requests and successor-insert rollback.
 - No login endpoint, JWT issuance, cookie/CSRF implementation or logout endpoint is included.
-- **Not yet complete:** CI has not passed for this branch; TD-MIG-004 remains open until the full test evidence and review are accepted.
+- **Verification:** GitHub Actions CI run #438 passed the build-and-test job and Docker Compose smoke-test job, including PostgreSQL integration tests and readiness-failure verification. TD-MIG-004 remains open pending final transaction/lock-order review.
 
 ## Repository
 
