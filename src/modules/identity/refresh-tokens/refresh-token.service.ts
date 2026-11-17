@@ -201,7 +201,7 @@ export class RefreshTokenService {
         refreshToken: formatRefreshToken(successorId, successorSecret),
         expiresAt: successor.expires_at
       };
-    });
+    }, { isolationLevel: 'ReadCommitted' });
 
     if (result.status !== 'rotated') throw this.unauthorized();
     return {
