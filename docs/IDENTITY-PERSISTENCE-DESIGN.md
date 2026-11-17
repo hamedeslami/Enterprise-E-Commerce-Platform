@@ -35,7 +35,7 @@ The Prisma enum representation intentionally replaces the legacy EF numeric acco
 
 Each browser/device session belongs to one Identity user. A composite foreign key from `(user_id, actor_kind)` to `users(id, account_type)` prevents a Customer session from being persisted as Staff or vice versa.
 
-Customer defaults are 30-day absolute / 7-day idle; Staff defaults are 12-hour absolute / 30-minute idle. These values are policy inputs to the session service, not hard-coded database defaults. The database enforces `idle_expires_at <= absolute_expires_at`. Revocation has a controlled reason code. IP address and raw User-Agent are not persisted as authentication factors.
+Customer defaults are 30-day absolute / 7-day idle; Staff defaults are 12-hour absolute / 30-minute idle. These values are policy inputs to the session service, not hard-coded database defaults. The database enforces `idle_expires_at <= absolute_expires_at`. Revocation has a controlled reason code. IP address and raw User-Agent are not persisted as authentication factors. In the M4 refresh contract, `last_seen_at` is updated together with idle-expiry renewal and therefore `idle_expires_at - last_seen_at` represents the session's configured idle window. Do not update `last_seen_at` independently on ordinary access requests unless the idle-window policy is separately persisted; otherwise the refresh service could no longer recover the configured window.
 
 ### RefreshToken
 
